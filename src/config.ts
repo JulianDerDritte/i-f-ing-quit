@@ -107,13 +107,8 @@ export const MAX_ZEITSCHRITT_SEKUNDEN = 0.1;
 export const ABLEGE_REICHWEITE = 1.0;
 
 // Darstellung der Szenen (Stufe 7: Layout-Literale aus SpielScene.ts und MenueScene.ts; Werte unveraendert).
-// Figur und NPCs: Koerper (Rechteck), Kopf (Kreis), Schatten; Hoehen in Bildpunkten ueber dem Fusspunkt.
+// Figur und NPCs (A-009: Pixel-Sprites aus src/grafik/); Hoehen in Bildpunkten ueber dem Fusspunkt.
 export const FIGUR_DARSTELLUNG = {
-  koerperBreite: 16,
-  koerperHoehe: 30,
-  kopfRadius: 8,
-  kopfMitteHoehe: 36,
-  kopfHelligkeit: 1.2,
   kameraHoehe: 15, // Punkt, dem die Kamera folgt
   nameHoehe: 46, // Rollenname ueber einem NPC
   schattenAlpha: 0.35,
@@ -121,8 +116,10 @@ export const FIGUR_DARSTELLUNG = {
 };
 export const KAMERA_LERP = 1; // Kamera folgt ohne Verzoegerung
 export const BODEN_TIEFE = -1; // Bodenflaeche liegt hinter allem
-export const BODEN_LINIE = { staerke: 1, ton: 0.8 };
-export const BLOCK_TOENE = { links: 0.7, rechts: 0.5, kante: 0.35 };
+// A-009 Teil a: Pixel-Grafik. Ein Rasterpunkt der Sprites = SPRITE_SKALA Bildschirmpunkte.
+export const SPRITE_SKALA = 2;
+export const LAUF_TAKT_MS = 110; // Dauer eines Laufbildes, solange sich die Figur bewegt
+export const SPRITE_KONSTANTEN = { skala: SPRITE_SKALA, laufTakt: LAUF_TAKT_MS };
 export const RAHMEN = { staerke: 2, farbe: 0xffffff };
 export const SCHRIFT_RAND = { npc: 3, hud: 4, meldung: 6, maschine: 3, farbe: '#000000' };
 export const DIALOG_ANTWORT_EINZUG = 12; // Text im Antwortknopf, Abstand vom linken Rand
@@ -259,6 +256,112 @@ export const TISCH_FARBE = 0x9a6a3a;
 export const ABLAGE_FARBE = 0xf2d24b;
 export const START_FARBE = 0xffffff;
 export const FIGUR_FARBE = 0xd94a4a;
+
+// Gemeinsame Palette der Pixel-Grafik (kraeftige Farben wie im Icon; Name -> Farbzahl).
+export const PALETTE = {
+  umriss: 0x0b0b14,
+  weiss: 0xffffff,
+  augen: 0x14141e,
+  haut: 0xf2b27a,
+  schnurrbart: 0x1a1008,
+  hautSchatten: 0xc98450,
+  haarBraun: 0x8a4a1c,
+  haarBraunLicht: 0xc0782e,
+  haarBlond: 0xe0b040,
+  haarBlondLicht: 0xf8d870,
+  haarSchwarz: 0x2a2a38,
+  haarSchwarzLicht: 0x4a4a62,
+  haarGrau: 0x8c8c9c,
+  haarGrauLicht: 0xb8b8c8,
+  haarRot: 0xc04a1c,
+  haarRotLicht: 0xe87a38,
+  hemd: 0xf6f6ff,
+  hemdSchatten: 0xb4badc,
+  krawatte: FIGUR_FARBE,
+  krawatteRot: 0xe01818,
+  hose: 0x2e2c52,
+  hoseLicht: 0x46447c,
+  schuh: 0x6b3a1c,
+  schuhSchwarz: 0x1c1c24,
+  anzug: 0x30305e,
+  anzugLicht: 0x4a4a8a,
+  papier: 0xf6f6ff,
+  papierLinie: 0x7a6ab8,
+  grau: 0x6a6a7c,
+  grauLicht: 0xa0a0b4,
+  orange: 0xe08a30,
+  kaffee: 0x5a3416,
+  gruen: 0x30a83c,
+  gruenLicht: 0x62d058,
+  gruenDunkel: 0x1a6a2a,
+  topf: 0xc8642c,
+  topfDunkel: 0x8a3c18,
+  erde: 0x3a2412,
+  wandKopf: 0x8a8ee0,
+  wandKopfLicht: 0xb4b8f4,
+  wandLinks: 0x4a5cc8,
+  wandLinksLicht: 0x6074e0,
+  wandRechts: 0x3a4ab0,
+  wandRechtsLicht: 0x4a5cc8,
+  wandNaht: 0x34429a,
+  sockel: 0x252c70,
+  sockelLicht: 0x5666d0,
+  fenster: 0x9ad8f0,
+  fensterLicht: 0xd8f4ff,
+  fensterRahmen: 0x1c2455,
+  fensterBrett: 0xc0c8f8,
+  lampe: 0xfff6b0,
+  lampeKern: 0xffffff,
+  lampeRand: 0xe0c060,
+  fliesenHell: 0x8494e4,
+  fliesenDunkel: 0x6474c8,
+  fuge: 0x2a3274,
+  fliesenGlanz: 0xa4b2f6,
+  parkettHell: 0xb87a3c,
+  parkettDunkel: 0x9c6430,
+  parkettFuge: 0x56301a,
+  teppich: 0xc8202c,
+  teppichLicht: 0xe03c48,
+  teppichDunkel: 0x5c0c16,
+  schwelle: 0xe0b84c,
+  schwelleDunkel: 0x6e4e1a,
+  holz: TISCH_FARBE,
+  holzLicht: 0xc88a48,
+  holzDunkel: 0x6a3e18,
+  holzTief: 0x4a2a10,
+  monitor: 0x20243c,
+  monitorLicht: 0x5ac8ff,
+  maschine: MASCHINE_FARBE,
+  maschineLicht: 0x8a5a3c,
+  tuerHolz: 0x6a3a1c,
+  tuerHolzLicht: 0x9a5a2c,
+  gelb: ABLAGE_FARBE,
+  gelbDunkel: 0xc89a10,
+  pfeil: 0xf0a000,
+  startWeiss: 0xf6f6ff,
+  schildGrau: 0xb4b4c4,
+  schatten: 0x1a1a2e,
+} as const;
+
+// Dekor und Wege der Pixel-Welt (nur Anzeige, keine Kollision; Karte und Spielregeln unveraendert).
+// Chef: steht hinter den Chef-Tisch-Zellen (27-28, 3-4); reine Anzeige, die Figur darf dorthin laufen.
+export const CHEF_ZELLE: [number, number] = [28, 2];
+// Roter Teppichlaeufer: Zeilen 7 und 8 von x=9 bis x=26, dazu (26,6) und (26,5) (endet neben der Ablagezelle (27,5)).
+export const TEPPICH_ZELLEN: [number, number][] = [
+  ...Array.from({ length: 18 }, (_, i): [number, number] => [9 + i, 7]),
+  ...Array.from({ length: 18 }, (_, i): [number, number] => [9 + i, 8]),
+  [26, 6],
+  [26, 5],
+];
+// Zimmerpflanzen in Ecken (Boden an der Wand).
+export const PFLANZEN_ZELLEN: [number, number][] = [
+  [1, 1],
+  [8, 16],
+  [10, 1],
+  [23, 16],
+  [25, 16],
+  [30, 1],
+];
 
 export function zeitText(sekunden: number): string {
   const m = Math.floor(sekunden / 60);

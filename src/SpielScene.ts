@@ -1,10 +1,6 @@
 import Phaser from 'phaser';
 import {
-  ABLAGE_FARBE,
-  BLOCK_TOENE,
-  BODEN_LINIE,
   BODEN_TIEFE,
-  BODENFARBEN,
   DIALOG_ANTWORT_EINZUG,
   FIGUR_DARSTELLUNG,
   HUD_LAYOUT,
@@ -23,8 +19,6 @@ import {
   DIALOG_RAHMEN_FARBE,
   DIALOG_TEXT_SCHRIFT_PX,
   DIALOG_TIEFE,
-  FIGUR_FARBE,
-  FIGUR_RADIUS,
   DIALOG_MAX_ANTWORTEN,
   HINWEIS_SCHRIFT_PX,
   HUD_FARBE_NORMAL,
@@ -37,11 +31,11 @@ import {
   INVENTAR_TIEFE,
   INVENTAR_TITEL_FARBE,
   INVENTAR_TITEL_SCHRIFT_PX,
+  SPRITE_SKALA,
   KACHEL_BREITE,
   KACHEL_HOEHE,
   KAFFEE_HINWEIS_TEXT,
   KAFFEE_HUD,
-  MASCHINE_FARBE,
   MASCHINE_HOEHE,
   MASCHINE_SCHRIFT_PX,
   MAX_ZEITSCHRITT_SEKUNDEN,
@@ -49,17 +43,11 @@ import {
   MELDUNG_SCHRIFT_PX,
   MELDUNG_ZEIT_SCHRIFT_PX,
   NPC_DIALOG_KOSTEN,
-  NPC_FARBEN,
-  NPC_RADIUS,
   NPC_SCHRIFT_PX,
   OVERLAY_ABDUNKLUNG,
-  START_FARBE,
   STUFEN_NAMEN,
   TIMER_WARNUNG_SEKUNDEN,
-  TISCH_FARBE,
-  TISCH_HOEHE,
   VERSCHUETTET_MELDUNG,
-  WAND_FARBE,
   WAND_HOEHE,
   zeitText,
 } from './config.ts';
@@ -103,22 +91,24 @@ import type { Eingabe, Position } from './bewegung.ts';
 import { BEREICH_ANZEIGE, KARTE, bereichAnZelle, zellArt } from './karte.ts';
 import type { BereichName } from './karte.ts';
 import { gitterZuBild } from './projektion.ts';
+import { NPC_SCHRITTE, SPIELER_SCHRITTE } from './grafik/figuren.ts';
+import { figurZustand, neuerFigurZustand, stehen } from './grafik/animation.ts';
+import type { FigurZustand } from './grafik/animation.ts';
+import { BODEN_TEXTUR, figurSchluessel, npcSchluessel, registriereFiguren, registriereWelt } from './grafik/texturen.ts';
+import { bodenGroesse, weltObjekte } from './grafik/welt.ts';
 
 const TASTEN = 'W,A,S,D,UP,LEFT,DOWN,RIGHT';
-
-function tonen(farbe: number, faktor: number): number {
-  const r = Math.min(255, Math.round(((farbe >> 16) & 0xff) * faktor));
-  const g = Math.min(255, Math.round(((farbe >> 8) & 0xff) * faktor));
-  const b = Math.min(255, Math.round((farbe & 0xff) * faktor));
-  return (r << 16) | (g << 8) | b;
-}
 
 export class SpielScene extends Phaser.Scene {
   // Zustand wird bei jedem Start der Szene in create() neu angelegt.
   private pos!: Position;
   private bereich!: BereichName;
   private tasten!: Record<string, Phaser.Input.Keyboard.Key>;
-  private figur!: Phaser.GameObjects.Graphics;
+  private figurBild!: Phaser.GameObjects.Image;
+  private figurSchatten!: Phaser.GameObjects.Image;
+  private figZ!: FigurZustand;
+  private npcZ: FigurZustand[] = [];
+  private npcSchatten: Phaser.GameObjects.Image[] = [];
   private folgeZiel!: Phaser.GameObjects.Zone;
   private raumText!: Phaser.GameObjects.Text;
   private timerText!: Phaser.GameObjects.Text;
@@ -130,7 +120,7 @@ export class SpielScene extends Phaser.Scene {
   private zustand!: Spielzustand;
   private startSekunden = 0;
   private welt!: NpcWelt;
-  private npcGrafiken: Phaser.GameObjects.Graphics[] = [];
+  private npcBilder: Phaser.GameObjects.Image[] = [];
   private npcNamen: Phaser.GameObjects.Text[] = [];
   private dialog: DialogZustand | null = null;
   private dialogObjekte: (Phaser.GameObjects.Rectangle | Phaser.GameObjects.Text)[] = []; // alle Teile des Dialogfensters (nur ein-/ausgeblendet)
@@ -180,8 +170,12 @@ export class SpielScene extends Phaser.Scene {
 
     this.zeichneKarte();
 
-    this.figur = this.add.graphics();
+    registriereFiguren(this.textures);
     const bild = gitterZuBild(this.pos.x, this.pos.y);
+    // Pixel-Figur: Schatten und Bild, Fusspunkt unten Mitte; Blick am Anfang nach rechts unten (zur ersten Tuer)
+    this.figZ = neuerFigurZustand(bild.x, bild.y, 'ur');
+    this.figurSchatten = this.add.image(bild.x, bild.y, 'schatten').setScale(SPRITE_SKALA).setAlpha(FIGUR_DARSTELLUNG.schattenAlpha);
+    this.figurBild = this.add.image(bild.x, bild.y, figurSchluessel('ur', 0, false)).setOrigin(0.5, 1).setScale(SPRITE_SKALA);
     this.folgeZiel = this.add.zone(bild.x, bild.y, 1, 1);
 
     const cam = this.cameras.main;
@@ -212,7 +206,13 @@ export class SpielScene extends Phaser.Scene {
     this.verschuettetRest = 0;
     this.inventarSeitenTexte = [];
     this.inventarSeite = 0;
-    this.npcGrafiken = NPCS.map(() => this.add.graphics());
+    this.npcBilder = NPCS.map((d) => this.add.image(0, 0, npcSchluessel(d.id, 'ur', 0, false)).setOrigin(0.5, 1).setScale(SPRITE_SKALA));
+    this.npcSchatten = NPCS.map(() => this.add.image(0, 0, 'schatten').setScale(SPRITE_SKALA).setAlpha(FIGUR_DARSTELLUNG.schattenAlpha));
+    this.npcZ = NPCS.map((d) => {
+      const p = npcPosition(this.welt, d.id);
+      const b = gitterZuBild(p.x, p.y);
+      return neuerFigurZustand(b.x, b.y, 'ur');
+    });
     this.npcNamen = NPCS.map((d) =>
       this.add
         .text(0, 0, d.name, { fontSize: `${NPC_SCHRIFT_PX}px`, color: '#ffffff', stroke: SCHRIFT_RAND.farbe, strokeThickness: SCHRIFT_RAND.npc })
@@ -222,8 +222,8 @@ export class SpielScene extends Phaser.Scene {
     this.baueAnzeige(stufe);
     this.baueDialogFenster();
     this.baueInventarFenster();
-    this.zeichneFigur();
-    this.zeichneNpcs();
+    this.zeichneFigur(0);
+    this.zeichneNpcs(0);
   }
 
   update(_zeit: number, delta: number): void {
@@ -259,14 +259,14 @@ export class SpielScene extends Phaser.Scene {
     };
     this.pos = schritt(KARTE, this.pos, eingabe, dt);
     this.welt = npcsFortschreiben(this.welt, dt, this.zustand.phase);
-    this.zeichneNpcs();
+    this.zeichneNpcs(delta);
 
     const b =bereichAnZelle(KARTE, Math.floor(this.pos.x), Math.floor(this.pos.y));
     if (b !== null && b !== this.bereich) {
       this.bereich = b;
       this.raumText.setText(`Raum: ${BEREICH_ANZEIGE[b]}`);
     }
-    this.zeichneFigur();
+    this.zeichneFigur(delta);
 
     // Hinweis: an der Ablage hat sie Vorrang; an der Maschine nur, solange kein Kaffee getragen wird.
     const art = nahAnAblage(KARTE, this.pos.x, this.pos.y)
@@ -335,6 +335,7 @@ export class SpielScene extends Phaser.Scene {
   private oeffneInventar(): void {
     this.zustand = inventarOeffnen(this.zustand);
     if (this.zustand.phase !== 'inventar') return;
+    this.figurSteht();
     this.setzeHinweis('keiner');
     this.inventarSeitenTexte = inventarSeiten(this.inventar);
     this.inventarSeite = 0;
@@ -375,6 +376,7 @@ export class SpielScene extends Phaser.Scene {
     const def = NPCS.find((d) => d.id === id);
     if (def === undefined) throw new Error(`NPC ${id} unbekannt`);
     markiereGesprochen(this.welt, id);
+    this.figurSteht();
     this.zustand = abziehen(this.zustand, NPC_DIALOG_KOSTEN[id]);
     this.setzeHinweis('keiner');
     this.zeigeTimer();
@@ -525,22 +527,26 @@ export class SpielScene extends Phaser.Scene {
     });
   }
 
-  private zeichneNpcs(): void {
+  // NPCs: Bild nach Blickrichtung und Laufschritt aus der Bewegung des Bildes (Stillstand im Gespraech: Stehbild)
+  private zeichneNpcs(deltaMs: number): void {
     NPCS.forEach((d, i) => {
       const p = npcPosition(this.welt, d.id);
       const bild = gitterZuBild(p.x, p.y);
-      const g = this.npcGrafiken[i];
-      g.clear();
-      g.setDepth(p.x + p.y);
-      const rx = NPC_RADIUS * Math.SQRT2 * KACHEL_BREITE;
-      const ry = NPC_RADIUS * Math.SQRT2 * KACHEL_HOEHE;
-      g.fillStyle(FIGUR_DARSTELLUNG.schattenFarbe, FIGUR_DARSTELLUNG.schattenAlpha);
-      g.fillEllipse(bild.x, bild.y, rx, ry);
-      g.fillStyle(NPC_FARBEN[d.id], 1);
-      g.fillRect(bild.x - FIGUR_DARSTELLUNG.koerperBreite / 2, bild.y - FIGUR_DARSTELLUNG.koerperHoehe, FIGUR_DARSTELLUNG.koerperBreite, FIGUR_DARSTELLUNG.koerperHoehe);
-      g.fillStyle(tonen(NPC_FARBEN[d.id], FIGUR_DARSTELLUNG.kopfHelligkeit), 1);
-      g.fillCircle(bild.x, bild.y - FIGUR_DARSTELLUNG.kopfMitteHoehe, FIGUR_DARSTELLUNG.kopfRadius);
+      this.npcZ[i] = figurZustand(this.npcZ[i], bild.x, bild.y, deltaMs, NPC_SCHRITTE);
+      const z = this.npcZ[i];
+      this.npcBilder[i].setTexture(npcSchluessel(d.id, z.richtung, z.schritt, z.bewegt)).setPosition(bild.x, bild.y).setDepth(p.x + p.y);
+      this.npcSchatten[i].setPosition(bild.x, bild.y).setDepth(p.x + p.y - 0.01);
       this.npcNamen[i].setPosition(bild.x, bild.y - FIGUR_DARSTELLUNG.nameHoehe).setDepth(p.x + p.y);
+    });
+  }
+
+  // Spieler und NPCs zeigen das Stehbild (Gespraech, Inventar, Ende), die Blickrichtung bleibt.
+  private figurSteht(): void {
+    this.figZ = stehen(this.figZ);
+    this.figurBild.setTexture(figurSchluessel(this.figZ.richtung, 0, false));
+    NPCS.forEach((d, i) => {
+      this.npcZ[i] = stehen(this.npcZ[i]);
+      this.npcBilder[i].setTexture(npcSchluessel(d.id, this.npcZ[i].richtung, 0, false));
     });
   }
 
@@ -551,6 +557,7 @@ export class SpielScene extends Phaser.Scene {
 
   // Abdunkeln, Meldung und zwei Knoepfe. Wird genau einmal je Spiel aufgerufen (danach laeuft update nicht mehr).
   private zeigeMeldung(): void {
+    this.figurSteht();
     this.setzeHinweis('keiner');
     this.speichere(); // Ende des Laufs: Infos und Gegenstaende in den Speicher
     this.zeigeTimer();
@@ -687,93 +694,36 @@ export class SpielScene extends Phaser.Scene {
     feld.on('pointerdown', aktion);
   }
 
+  // Pixel-Welt: ein Bodenbild, dazu Waende, Moebel, Tueren, Pflanzen und Chef als Bilder (Tiefe wie bisher x + y + 1).
   private zeichneKarte(): void {
-    const boden = this.add.graphics().setDepth(BODEN_TIEFE);
-    for (let y = 0; y < KARTE.hoehe; y++) {
-      for (let x = 0; x < KARTE.breite; x++) {
-        const art = zellArt(KARTE, x, y);
-        if (art === 'wand') {
-          this.zeichneBlock(x, y, WAND_HOEHE, WAND_FARBE);
-          continue;
-        }
-        if (art === 'tisch') {
-          // Unter dem Tisch liegt Boden des Bereichs.
-          this.zeichneBoden(boden, x, y, this.bodenFarbe(x, y));
-          this.zeichneBlock(x, y, TISCH_HOEHE, TISCH_FARBE);
-          continue;
-        }
-        if (art === 'maschine') {
-          // Kaffeemaschine: Block mit Beschriftung auf der Deckflaeche; darunter Boden des Bereichs.
-          this.zeichneBoden(boden, x, y, this.bodenFarbe(x, y));
-          this.zeichneBlock(x, y, MASCHINE_HOEHE, MASCHINE_FARBE);
-          const deckel = gitterZuBild(x + 0.5, y + 0.5);
-          this.add
-            .text(deckel.x, deckel.y - MASCHINE_HOEHE, 'Kaffee', {
-              fontSize: `${MASCHINE_SCHRIFT_PX}px`,
-              color: '#ffffff',
-              stroke: SCHRIFT_RAND.farbe,
-              strokeThickness: SCHRIFT_RAND.maschine,
-            })
-            .setOrigin(0.5)
-            .setDepth(x + y + 2);
-          continue;
-        }
-        let farbe = this.bodenFarbe(x, y);
-        if (x === KARTE.ablage[0] && y === KARTE.ablage[1]) farbe = ABLAGE_FARBE;
-        if (x === KARTE.start[0] && y === KARTE.start[1]) farbe = START_FARBE;
-        this.zeichneBoden(boden, x, y, farbe);
+    registriereWelt(this.textures);
+    const g = bodenGroesse(KARTE);
+    this.add.image(g.ursprungX, 0, BODEN_TEXTUR).setOrigin(0, 0).setScale(SPRITE_SKALA).setDepth(BODEN_TIEFE);
+    for (const o of weltObjekte(KARTE)) {
+      this.add.image(o.bildX, o.bildY, o.schluessel).setOrigin(0.5, 1).setScale(SPRITE_SKALA).setDepth(o.tiefe);
+      if (o.art === 'maschine') {
+        // Kaffeemaschine: Beschriftung bleibt Phaser-Text (Teil b stellt sie auf Pixelschrift um).
+        const deckel = gitterZuBild(o.x + 0.5, o.y + 0.5);
+        this.add
+          .text(deckel.x, deckel.y - MASCHINE_HOEHE, 'Kaffee', {
+            fontSize: `${MASCHINE_SCHRIFT_PX}px`,
+            color: '#ffffff',
+            stroke: SCHRIFT_RAND.farbe,
+            strokeThickness: SCHRIFT_RAND.maschine,
+          })
+          .setOrigin(0.5)
+          .setDepth(o.x + o.y + 2);
       }
     }
   }
 
-  private bodenFarbe(x: number, y: number): number {
-    const b = bereichAnZelle(KARTE, x, y);
-    return b === null ? BODENFARBEN.Tuer : BODENFARBEN[b];
-  }
-
-  private zeichneBoden(g: Phaser.GameObjects.Graphics, x: number, y: number, farbe: number): void {
-    const n = gitterZuBild(x, y);
-    const o = gitterZuBild(x + 1, y);
-    const s = gitterZuBild(x + 1, y + 1);
-    const w = gitterZuBild(x, y + 1);
-    g.fillStyle(farbe, 1);
-    g.fillPoints([n, o, s, w], true);
-    g.lineStyle(BODEN_LINIE.staerke, tonen(farbe, BODEN_LINIE.ton), 1);
-    g.strokePoints([n, o, s, w], true);
-  }
-
-  // Block mit Deckflaeche und zwei unterschiedlich getoenten Seitenflaechen.
-  private zeichneBlock(x: number, y: number, hoehe: number, farbe: number): void {
-    const g = this.add.graphics().setDepth(x + y + 1);
-    const n = gitterZuBild(x, y);
-    const o = gitterZuBild(x + 1, y);
-    const s = gitterZuBild(x + 1, y + 1);
-    const w = gitterZuBild(x, y + 1);
-    const hoch = (p: Phaser.Types.Math.Vector2Like) => ({ x: p.x as number, y: (p.y as number) - hoehe });
-    g.fillStyle(tonen(farbe, BLOCK_TOENE.links), 1);
-    g.fillPoints([w, s, hoch(s), hoch(w)], true);
-    g.fillStyle(tonen(farbe, BLOCK_TOENE.rechts), 1);
-    g.fillPoints([s, o, hoch(o), hoch(s)], true);
-    g.fillStyle(farbe, 1);
-    g.fillPoints([hoch(n), hoch(o), hoch(s), hoch(w)], true);
-    g.lineStyle(BODEN_LINIE.staerke, tonen(farbe, BLOCK_TOENE.kante), 1);
-    g.strokePoints([hoch(n), hoch(o), hoch(s), hoch(w)], true);
-  }
-
-  private zeichneFigur(): void {
+  // Spieler: Bild nach Blickrichtung und Laufschritt (aus der Bewegung des Bildes), Schatten am Fusspunkt.
+  private zeichneFigur(deltaMs: number): void {
     const bild = gitterZuBild(this.pos.x, this.pos.y);
-    const g = this.figur;
-    g.clear();
-    g.setDepth(this.pos.x + this.pos.y);
-    // Schatten: der Kollisionskreis in der Projektion.
-    const rx = FIGUR_RADIUS * Math.SQRT2 * KACHEL_BREITE;
-    const ry = FIGUR_RADIUS * Math.SQRT2 * KACHEL_HOEHE;
-    g.fillStyle(FIGUR_DARSTELLUNG.schattenFarbe, FIGUR_DARSTELLUNG.schattenAlpha);
-    g.fillEllipse(bild.x, bild.y, rx, ry);
-    g.fillStyle(FIGUR_FARBE, 1);
-    g.fillRect(bild.x - FIGUR_DARSTELLUNG.koerperBreite / 2, bild.y - FIGUR_DARSTELLUNG.koerperHoehe, FIGUR_DARSTELLUNG.koerperBreite, FIGUR_DARSTELLUNG.koerperHoehe);
-    g.fillStyle(tonen(FIGUR_FARBE, FIGUR_DARSTELLUNG.kopfHelligkeit), 1);
-    g.fillCircle(bild.x, bild.y - FIGUR_DARSTELLUNG.kopfMitteHoehe, FIGUR_DARSTELLUNG.kopfRadius);
+    this.figZ = figurZustand(this.figZ, bild.x, bild.y, deltaMs, SPIELER_SCHRITTE);
+    const z = this.figZ;
+    this.figurBild.setTexture(figurSchluessel(z.richtung, z.schritt, z.bewegt)).setPosition(bild.x, bild.y).setDepth(this.pos.x + this.pos.y);
+    this.figurSchatten.setPosition(bild.x, bild.y).setDepth(this.pos.x + this.pos.y - 0.01);
     this.folgeZiel.setPosition(bild.x, bild.y - FIGUR_DARSTELLUNG.kameraHoehe);
   }
 
