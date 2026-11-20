@@ -6,7 +6,9 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "node --test --test-reporter=spec \"tests/*.test.ts\"",
+    "smoke": "node scripts/smoke.mjs"
   },
   "dependencies": {
     "phaser": "3.90.0"

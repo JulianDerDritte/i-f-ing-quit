@@ -37,6 +37,14 @@ Nach der Wahl der Schwierigkeit im Startmenue laeuft die Figur durch Vorzimmer, 
 - Neustart, "Nochmal" und der Weg ueber das Menue legen alles frisch an: NPCs am Start, keiner gesprochen, kein Fenster, Timer voll.
 - Die kurzen Timer je Stufe, die Gespraechskosten, Tempo, Radien und Fensterwerte stehen in `src/config.ts`.
 
+## Tests
+
+- `npm test` fuehrt alle Tests im Ordner `tests/` mit dem eingebauten Testlaeufer von Node aus (`node:test`, keine zusaetzliche Abhaengigkeit). Die Ausgabe nennt jeden Test mit seinem Ergebnis; der Ausgang ist ungleich null, sobald ein Test rot ist. Die Tests liegen bewusst ausserhalb von `src` und werden nicht vom Typpruefer erfasst.
+- `npm run smoke` baut das Spiel, startet die Vorschau als Kindprozess, ruft die Startseite und alle Dateien ab, auf die sie verweist (Skript, Bilder, Icons), und prueft Titel, Dateiart und Groesse des Bundles. Danach beendet es den Kindprozess ueber seine Prozesskennung und stellt sicher, dass der Port wieder frei ist.
+- Rotprobe-Regel fuer jede Testgruppe: Zuerst laeuft sie gegen einen absichtlich kaputten Stand und muss rot sein. Dann laeuft sie gegen den unveraenderten Stand und ist gruen. Dann laeuft sie gegen eine zweite, anders kaputte Fassung derselben Stelle und ist wieder rot. Nach dem Zuruecknehmen ist sie gruen. Ein Kommentar direkt ueber der Gruppe haelt fest, dass und wann das geschah (Datum und Stand). Laesst sich ein Zustand nicht herstellen, steht das mit Grund im Kommentar, und die Gruppe gilt nicht als belegt.
+- Findet ein Test einen echten Fehler im Spielcode, wird dieser nicht still repariert, sondern gemeldet.
+- Spiel- und Layoutwerte stehen in `src/config.ts`; die Konsistenztests dort pruefen Bereiche und Ganzzahligkeit.
+
 ## Probeparameter
 
 Die Adresse mit `?zeit=<Sekunden>` (zum Beispiel `?zeit=20`) ersetzt fuer diesen Start die Startzeit der gewaehlten Stufe, damit Sieg und Niederlage ohne langes Warten probiert werden koennen. Ohne Parameter oder bei ungueltigem oder nicht positivem Wert gilt die Konfiguration. Nur ein Probehilfsmittel, spaeter entfernbar.

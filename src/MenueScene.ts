@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { MENUE_SPEICHER, STUFEN, STUFEN_NAMEN, TIMER_SEKUNDEN, zeitText } from './config.ts';
+import { MENUE_LAYOUT, MENUE_SPEICHER, RAHMEN, STUFEN, STUFEN_NAMEN, TIMER_SEKUNDEN, zeitText } from './config.ts';
 import { auswahl } from './auswahl.ts';
 import { holeSpeicher, ladeInfos, loescheSpeicher } from './speicher.ts';
 
@@ -14,25 +14,26 @@ export class MenueScene extends Phaser.Scene {
 
   create(): void {
     const w = this.scale.width;
-    this.add.image(w / 2, 140, 'logo').setDisplaySize(260, 260);
+    const L = MENUE_LAYOUT;
+    this.add.image(w / 2, L.logoY, 'logo').setDisplaySize(L.logoGroesse, L.logoGroesse);
     this.add
-      .text(w / 2, 300, 'Schwierigkeit wählen', { fontSize: '20px', color: '#aaaaaa' })
+      .text(w / 2, L.titelY, 'Schwierigkeit wählen', { fontSize: `${L.titelPx}px`, color: '#aaaaaa' })
       .setOrigin(0.5);
 
     STUFEN.forEach((stufe, i) => {
-      const y = 370 + i * 80;
+      const y = L.stufeY0 + i * L.stufeAbstand;
       const feld = this.add
-        .rectangle(w / 2, y, 320, 64, 0x335577)
-        .setStrokeStyle(2, 0xffffff)
+        .rectangle(w / 2, y, L.knopfBreite, L.knopfHoehe, L.farbe)
+        .setStrokeStyle(RAHMEN.staerke, RAHMEN.farbe)
         .setInteractive({ useHandCursor: true });
       this.add
         .text(w / 2, y, `${STUFEN_NAMEN[stufe]}  ${zeitText(TIMER_SEKUNDEN[stufe])}`, {
-          fontSize: '28px',
+          fontSize: `${L.schriftPx}px`,
           color: '#ffffff',
         })
         .setOrigin(0.5);
-      feld.on('pointerover', () => feld.setFillStyle(0x4477aa));
-      feld.on('pointerout', () => feld.setFillStyle(0x335577));
+      feld.on('pointerover', () => feld.setFillStyle(L.hoverFarbe));
+      feld.on('pointerout', () => feld.setFillStyle(L.farbe));
       feld.on('pointerdown', () => {
         auswahl.stufe = stufe;
         this.scene.start('Spiel');
@@ -47,7 +48,7 @@ export class MenueScene extends Phaser.Scene {
       .setOrigin(0, 0.5);
     const loeschen = this.add
       .rectangle(M.knopfX, M.y, M.knopfBreite, M.knopfHoehe, M.knopfFarbe)
-      .setStrokeStyle(2, 0xffffff)
+      .setStrokeStyle(RAHMEN.staerke, RAHMEN.farbe)
       .setInteractive({ useHandCursor: true });
     this.add
       .text(M.knopfX, M.y, 'Speicher löschen', { fontSize: `${M.knopfSchriftPx}px`, color: '#ffffff' })

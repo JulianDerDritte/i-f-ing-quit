@@ -106,6 +106,71 @@ export const MAX_ZEITSCHRITT_SEKUNDEN = 0.1;
 // Ablegen der Kuendigung: groesster Abstand (Zellen) der Figurmitte zur Mitte der Ablagezelle.
 export const ABLEGE_REICHWEITE = 1.0;
 
+// Darstellung der Szenen (Stufe 7: Layout-Literale aus SpielScene.ts und MenueScene.ts; Werte unveraendert).
+// Figur und NPCs: Koerper (Rechteck), Kopf (Kreis), Schatten; Hoehen in Bildpunkten ueber dem Fusspunkt.
+export const FIGUR_DARSTELLUNG = {
+  koerperBreite: 16,
+  koerperHoehe: 30,
+  kopfRadius: 8,
+  kopfMitteHoehe: 36,
+  kopfHelligkeit: 1.2,
+  kameraHoehe: 15, // Punkt, dem die Kamera folgt
+  nameHoehe: 46, // Rollenname ueber einem NPC
+  schattenAlpha: 0.35,
+  schattenFarbe: 0x000000,
+};
+export const KAMERA_LERP = 1; // Kamera folgt ohne Verzoegerung
+export const BODEN_TIEFE = -1; // Bodenflaeche liegt hinter allem
+export const BODEN_LINIE = { staerke: 1, ton: 0.8 };
+export const BLOCK_TOENE = { links: 0.7, rechts: 0.5, kante: 0.35 };
+export const RAHMEN = { staerke: 2, farbe: 0xffffff };
+export const SCHRIFT_RAND = { npc: 3, hud: 4, meldung: 6, maschine: 3, farbe: '#000000' };
+export const DIALOG_ANTWORT_EINZUG = 12; // Text im Antwortknopf, Abstand vom linken Rand
+// HUD oben links und "Zurück zum Menü" oben rechts.
+export const HUD_LAYOUT = {
+  raumX: 10,
+  raumY: 8,
+  raumPx: 22,
+  stufeX: 10,
+  stufeY: 38,
+  stufePx: 14,
+  timerY: 6,
+  hinweisAbstandUnten: 14,
+  zurueckAbstandRechts: 95, // Mitte des Knopfs vom rechten Bildrand
+  zurueckY: 28,
+  zurueckBreite: 170,
+  zurueckHoehe: 36,
+  zurueckPx: 16,
+  zurueckFarbe: 0x553333,
+};
+// Meldung nach Sieg oder Niederlage (Abstaende von der Bildmitte).
+export const MELDUNG_LAYOUT = {
+  tiefe: 20000,
+  titelDy: -110,
+  zeitDy: -50,
+  knopfDx: 110,
+  knopfDy: 30,
+  knopfBreite: 190,
+  knopfHoehe: 56,
+  knopfFarbe: 0x335577,
+  knopfHoverFarbe: 0x4477aa,
+  overlayFarbe: 0x000000,
+};
+// Startmenue.
+export const MENUE_LAYOUT = {
+  logoY: 140,
+  logoGroesse: 260,
+  titelY: 300,
+  titelPx: 20,
+  stufeY0: 370,
+  stufeAbstand: 80,
+  knopfBreite: 320,
+  knopfHoehe: 64,
+  schriftPx: 28,
+  farbe: 0x335577,
+  hoverFarbe: 0x4477aa,
+};
+
 // Zeichentiefe der HUD-Teile, die ab Stufe 6 dazukommen (gleich der bisherigen HUD-Tiefe der Szene).
 export const HUD_TIEFE = 10000;
 

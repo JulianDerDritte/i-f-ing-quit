@@ -1,7 +1,17 @@
 import Phaser from 'phaser';
 import {
   ABLAGE_FARBE,
+  BLOCK_TOENE,
+  BODEN_LINIE,
+  BODEN_TIEFE,
   BODENFARBEN,
+  DIALOG_ANTWORT_EINZUG,
+  FIGUR_DARSTELLUNG,
+  HUD_LAYOUT,
+  KAMERA_LERP,
+  MELDUNG_LAYOUT,
+  RAHMEN,
+  SCHRIFT_RAND,
   DIALOG_ANTWORT_SCHRIFT_PX,
   DIALOG_FENSTER_FARBE,
   DIALOG_KNOPF_FARBE,
@@ -181,7 +191,7 @@ export class SpielScene extends Phaser.Scene {
       (KARTE.breite + KARTE.hoehe) * (KACHEL_BREITE / 2),
       (KARTE.breite + KARTE.hoehe) * (KACHEL_HOEHE / 2) + WAND_HOEHE,
     );
-    cam.startFollow(this.folgeZiel, true, 1, 1);
+    cam.startFollow(this.folgeZiel, true, KAMERA_LERP, KAMERA_LERP);
 
     // Zustand und Eingabe frisch: keine haengende Taste, Timer voll, keine Meldung.
     kb.resetKeys();
@@ -205,7 +215,7 @@ export class SpielScene extends Phaser.Scene {
     this.npcGrafiken = NPCS.map(() => this.add.graphics());
     this.npcNamen = NPCS.map((d) =>
       this.add
-        .text(0, 0, d.name, { fontSize: `${NPC_SCHRIFT_PX}px`, color: '#ffffff', stroke: '#000000', strokeThickness: 3 })
+        .text(0, 0, d.name, { fontSize: `${NPC_SCHRIFT_PX}px`, color: '#ffffff', stroke: SCHRIFT_RAND.farbe, strokeThickness: SCHRIFT_RAND.npc })
         .setOrigin(0.5, 1),
     );
 
@@ -403,7 +413,7 @@ export class SpielScene extends Phaser.Scene {
       if (an) {
         const kr = r.knoepfe[i];
         feld.setPosition(kr.x + kr.breite / 2, kr.y + kr.hoehe / 2);
-        text.setPosition(kr.x + 12, kr.y + kr.hoehe / 2);
+        text.setPosition(kr.x + DIALOG_ANTWORT_EINZUG, kr.y + kr.hoehe / 2);
         text.setText(antwortBeschriftung(this.dialog, angeboten[i].antwort));
       }
     }
@@ -467,7 +477,7 @@ export class SpielScene extends Phaser.Scene {
     const fm = mitte(f);
     this.dialogFenster = this.add
       .rectangle(fm.x, fm.y, f.breite, f.hoehe, DIALOG_FENSTER_FARBE)
-      .setStrokeStyle(2, DIALOG_RAHMEN_FARBE)
+      .setStrokeStyle(RAHMEN.staerke, DIALOG_RAHMEN_FARBE)
       .setScrollFactor(0)
       .setDepth(tiefe);
     this.dialogObjekte.push(this.dialogFenster);
@@ -492,12 +502,12 @@ export class SpielScene extends Phaser.Scene {
       const m = mitte(kr);
       const feld = this.add
         .rectangle(m.x, m.y, kr.breite, kr.hoehe, DIALOG_KNOPF_FARBE)
-        .setStrokeStyle(2, DIALOG_RAHMEN_FARBE)
+        .setStrokeStyle(RAHMEN.staerke, DIALOG_RAHMEN_FARBE)
         .setScrollFactor(0)
         .setDepth(tiefe + 1)
         .setInteractive({ useHandCursor: true });
       const text = this.add
-        .text(kr.x + 12, m.y, '', { fontSize: `${DIALOG_ANTWORT_SCHRIFT_PX}px`, color: '#ffffff' })
+        .text(kr.x + DIALOG_ANTWORT_EINZUG, m.y, '', { fontSize: `${DIALOG_ANTWORT_SCHRIFT_PX}px`, color: '#ffffff' })
         .setOrigin(0, 0.5)
         .setScrollFactor(0)
         .setDepth(tiefe + 2);
@@ -524,13 +534,13 @@ export class SpielScene extends Phaser.Scene {
       g.setDepth(p.x + p.y);
       const rx = NPC_RADIUS * Math.SQRT2 * KACHEL_BREITE;
       const ry = NPC_RADIUS * Math.SQRT2 * KACHEL_HOEHE;
-      g.fillStyle(0x000000, 0.35);
+      g.fillStyle(FIGUR_DARSTELLUNG.schattenFarbe, FIGUR_DARSTELLUNG.schattenAlpha);
       g.fillEllipse(bild.x, bild.y, rx, ry);
       g.fillStyle(NPC_FARBEN[d.id], 1);
-      g.fillRect(bild.x - 8, bild.y - 30, 16, 30);
-      g.fillStyle(tonen(NPC_FARBEN[d.id], 1.2), 1);
-      g.fillCircle(bild.x, bild.y - 36, 8);
-      this.npcNamen[i].setPosition(bild.x, bild.y - 46).setDepth(p.x + p.y);
+      g.fillRect(bild.x - FIGUR_DARSTELLUNG.koerperBreite / 2, bild.y - FIGUR_DARSTELLUNG.koerperHoehe, FIGUR_DARSTELLUNG.koerperBreite, FIGUR_DARSTELLUNG.koerperHoehe);
+      g.fillStyle(tonen(NPC_FARBEN[d.id], FIGUR_DARSTELLUNG.kopfHelligkeit), 1);
+      g.fillCircle(bild.x, bild.y - FIGUR_DARSTELLUNG.kopfMitteHoehe, FIGUR_DARSTELLUNG.kopfRadius);
+      this.npcNamen[i].setPosition(bild.x, bild.y - FIGUR_DARSTELLUNG.nameHoehe).setDepth(p.x + p.y);
     });
   }
 
@@ -548,31 +558,31 @@ export class SpielScene extends Phaser.Scene {
     const w = this.scale.width;
     const h = this.scale.height;
     this.add
-      .rectangle(w / 2, h / 2, w, h, 0x000000, OVERLAY_ABDUNKLUNG)
+      .rectangle(w / 2, h / 2, w, h, MELDUNG_LAYOUT.overlayFarbe, OVERLAY_ABDUNKLUNG)
       .setScrollFactor(0)
-      .setDepth(20000);
-    const stil = { color: '#ffffff', stroke: '#000000', strokeThickness: 6 };
+      .setDepth(MELDUNG_LAYOUT.tiefe);
+    const stil = { color: '#ffffff', stroke: SCHRIFT_RAND.farbe, strokeThickness: SCHRIFT_RAND.meldung };
     this.add
-      .text(w / 2, h / 2 - 110, sieg ? 'Kündigung abgelegt!' : 'Zeit abgelaufen!', {
+      .text(w / 2, h / 2 + MELDUNG_LAYOUT.titelDy, sieg ? 'Kündigung abgelegt!' : 'Zeit abgelaufen!', {
         ...stil,
         fontSize: `${MELDUNG_SCHRIFT_PX}px`,
         fontStyle: 'bold',
       })
       .setOrigin(0.5)
       .setScrollFactor(0)
-      .setDepth(20001);
+      .setDepth(MELDUNG_LAYOUT.tiefe + 1);
     if (sieg) {
       this.add
-        .text(w / 2, h / 2 - 50, `Übrige Zeit: ${zeitAufgerundet(this.zustand.rest)}`, {
+        .text(w / 2, h / 2 + MELDUNG_LAYOUT.zeitDy, `Übrige Zeit: ${zeitAufgerundet(this.zustand.rest)}`, {
           ...stil,
           fontSize: `${MELDUNG_ZEIT_SCHRIFT_PX}px`,
         })
         .setOrigin(0.5)
         .setScrollFactor(0)
-        .setDepth(20001);
+        .setDepth(MELDUNG_LAYOUT.tiefe + 1);
     }
-    this.baueKnopf(w / 2 - 110, h / 2 + 30, 190, sieg ? 'Nochmal' : 'Neustart', () => this.scene.restart());
-    this.baueKnopf(w / 2 + 110, h / 2 + 30, 190, 'Zum Menü', () => this.zumMenue());
+    this.baueKnopf(w / 2 - MELDUNG_LAYOUT.knopfDx, h / 2 + MELDUNG_LAYOUT.knopfDy, MELDUNG_LAYOUT.knopfBreite, sieg ? 'Nochmal' : 'Neustart', () => this.scene.restart());
+    this.baueKnopf(w / 2 + MELDUNG_LAYOUT.knopfDx, h / 2 + MELDUNG_LAYOUT.knopfDy, MELDUNG_LAYOUT.knopfBreite, 'Zum Menü', () => this.zumMenue());
   }
 
   private zeigeVerschuettet(): void {
@@ -593,7 +603,7 @@ export class SpielScene extends Phaser.Scene {
     this.inventarObjekte.push(
       this.add
         .rectangle(fm.x, fm.y, r.fenster.breite, r.fenster.hoehe, INVENTAR_FENSTER_FARBE)
-        .setStrokeStyle(2, DIALOG_RAHMEN_FARBE)
+        .setStrokeStyle(RAHMEN.staerke, DIALOG_RAHMEN_FARBE)
         .setScrollFactor(0)
         .setDepth(tiefe),
     );
@@ -633,7 +643,7 @@ export class SpielScene extends Phaser.Scene {
       const m = mitte(q);
       const feld = this.add
         .rectangle(m.x, m.y, q.breite, q.hoehe, DIALOG_KNOPF_FARBE)
-        .setStrokeStyle(2, DIALOG_RAHMEN_FARBE)
+        .setStrokeStyle(RAHMEN.staerke, DIALOG_RAHMEN_FARBE)
         .setScrollFactor(0)
         .setDepth(tiefe + 1)
         .setInteractive({ useHandCursor: true });
@@ -662,23 +672,23 @@ export class SpielScene extends Phaser.Scene {
 
   private baueKnopf(x: number, y: number, breite: number, beschriftung: string, aktion: () => void): void {
     const feld = this.add
-      .rectangle(x, y, breite, 56, 0x335577)
-      .setStrokeStyle(2, 0xffffff)
+      .rectangle(x, y, breite, MELDUNG_LAYOUT.knopfHoehe, MELDUNG_LAYOUT.knopfFarbe)
+      .setStrokeStyle(RAHMEN.staerke, RAHMEN.farbe)
       .setScrollFactor(0)
-      .setDepth(20001)
+      .setDepth(MELDUNG_LAYOUT.tiefe + 1)
       .setInteractive({ useHandCursor: true });
     this.add
       .text(x, y, beschriftung, { fontSize: `${MELDUNG_KNOPF_SCHRIFT_PX}px`, color: '#ffffff' })
       .setOrigin(0.5)
       .setScrollFactor(0)
-      .setDepth(20002);
-    feld.on('pointerover', () => feld.setFillStyle(0x4477aa));
-    feld.on('pointerout', () => feld.setFillStyle(0x335577));
+      .setDepth(MELDUNG_LAYOUT.tiefe + 2);
+    feld.on('pointerover', () => feld.setFillStyle(MELDUNG_LAYOUT.knopfHoverFarbe));
+    feld.on('pointerout', () => feld.setFillStyle(MELDUNG_LAYOUT.knopfFarbe));
     feld.on('pointerdown', aktion);
   }
 
   private zeichneKarte(): void {
-    const boden = this.add.graphics().setDepth(-1);
+    const boden = this.add.graphics().setDepth(BODEN_TIEFE);
     for (let y = 0; y < KARTE.hoehe; y++) {
       for (let x = 0; x < KARTE.breite; x++) {
         const art = zellArt(KARTE, x, y);
@@ -701,8 +711,8 @@ export class SpielScene extends Phaser.Scene {
             .text(deckel.x, deckel.y - MASCHINE_HOEHE, 'Kaffee', {
               fontSize: `${MASCHINE_SCHRIFT_PX}px`,
               color: '#ffffff',
-              stroke: '#000000',
-              strokeThickness: 3,
+              stroke: SCHRIFT_RAND.farbe,
+              strokeThickness: SCHRIFT_RAND.maschine,
             })
             .setOrigin(0.5)
             .setDepth(x + y + 2);
@@ -728,7 +738,7 @@ export class SpielScene extends Phaser.Scene {
     const w = gitterZuBild(x, y + 1);
     g.fillStyle(farbe, 1);
     g.fillPoints([n, o, s, w], true);
-    g.lineStyle(1, tonen(farbe, 0.8), 1);
+    g.lineStyle(BODEN_LINIE.staerke, tonen(farbe, BODEN_LINIE.ton), 1);
     g.strokePoints([n, o, s, w], true);
   }
 
@@ -740,13 +750,13 @@ export class SpielScene extends Phaser.Scene {
     const s = gitterZuBild(x + 1, y + 1);
     const w = gitterZuBild(x, y + 1);
     const hoch = (p: Phaser.Types.Math.Vector2Like) => ({ x: p.x as number, y: (p.y as number) - hoehe });
-    g.fillStyle(tonen(farbe, 0.7), 1);
+    g.fillStyle(tonen(farbe, BLOCK_TOENE.links), 1);
     g.fillPoints([w, s, hoch(s), hoch(w)], true);
-    g.fillStyle(tonen(farbe, 0.5), 1);
+    g.fillStyle(tonen(farbe, BLOCK_TOENE.rechts), 1);
     g.fillPoints([s, o, hoch(o), hoch(s)], true);
     g.fillStyle(farbe, 1);
     g.fillPoints([hoch(n), hoch(o), hoch(s), hoch(w)], true);
-    g.lineStyle(1, tonen(farbe, 0.35), 1);
+    g.lineStyle(BODEN_LINIE.staerke, tonen(farbe, BLOCK_TOENE.kante), 1);
     g.strokePoints([hoch(n), hoch(o), hoch(s), hoch(w)], true);
   }
 
@@ -758,64 +768,64 @@ export class SpielScene extends Phaser.Scene {
     // Schatten: der Kollisionskreis in der Projektion.
     const rx = FIGUR_RADIUS * Math.SQRT2 * KACHEL_BREITE;
     const ry = FIGUR_RADIUS * Math.SQRT2 * KACHEL_HOEHE;
-    g.fillStyle(0x000000, 0.35);
+    g.fillStyle(FIGUR_DARSTELLUNG.schattenFarbe, FIGUR_DARSTELLUNG.schattenAlpha);
     g.fillEllipse(bild.x, bild.y, rx, ry);
     g.fillStyle(FIGUR_FARBE, 1);
-    g.fillRect(bild.x - 8, bild.y - 30, 16, 30);
-    g.fillStyle(tonen(FIGUR_FARBE, 1.2), 1);
-    g.fillCircle(bild.x, bild.y - 36, 8);
-    this.folgeZiel.setPosition(bild.x, bild.y - 15);
+    g.fillRect(bild.x - FIGUR_DARSTELLUNG.koerperBreite / 2, bild.y - FIGUR_DARSTELLUNG.koerperHoehe, FIGUR_DARSTELLUNG.koerperBreite, FIGUR_DARSTELLUNG.koerperHoehe);
+    g.fillStyle(tonen(FIGUR_FARBE, FIGUR_DARSTELLUNG.kopfHelligkeit), 1);
+    g.fillCircle(bild.x, bild.y - FIGUR_DARSTELLUNG.kopfMitteHoehe, FIGUR_DARSTELLUNG.kopfRadius);
+    this.folgeZiel.setPosition(bild.x, bild.y - FIGUR_DARSTELLUNG.kameraHoehe);
   }
 
   private baueAnzeige(stufe: Stufe): void {
     const w = this.scale.width;
-    const stil = { color: '#ffffff', stroke: '#000000', strokeThickness: 4 };
+    const stil = { color: '#ffffff', stroke: SCHRIFT_RAND.farbe, strokeThickness: SCHRIFT_RAND.hud };
     this.raumText = this.add
-      .text(10, 8, `Raum: ${BEREICH_ANZEIGE[this.bereich]}`, { ...stil, fontSize: '22px' })
+      .text(HUD_LAYOUT.raumX, HUD_LAYOUT.raumY, `Raum: ${BEREICH_ANZEIGE[this.bereich]}`, { ...stil, fontSize: `${HUD_LAYOUT.raumPx}px` })
       .setScrollFactor(0)
-      .setDepth(10000);
+      .setDepth(HUD_TIEFE);
     this.add
-      .text(10, 38, `Stufe: ${STUFEN_NAMEN[stufe]} · Startzeit ${zeitAufgerundet(this.startSekunden)}`, {
+      .text(HUD_LAYOUT.stufeX, HUD_LAYOUT.stufeY, `Stufe: ${STUFEN_NAMEN[stufe]} · Startzeit ${zeitAufgerundet(this.startSekunden)}`, {
         ...stil,
-        fontSize: '14px',
+        fontSize: `${HUD_LAYOUT.stufePx}px`,
       })
       .setScrollFactor(0)
-      .setDepth(10000);
+      .setDepth(HUD_TIEFE);
     this.timerText = this.add
-      .text(w / 2, 6, zeitAufgerundet(this.zustand.rest), {
+      .text(w / 2, HUD_LAYOUT.timerY, zeitAufgerundet(this.zustand.rest), {
         ...stil,
         fontSize: `${HUD_SCHRIFT_PX}px`,
         fontStyle: 'bold',
       })
       .setOrigin(0.5, 0)
       .setScrollFactor(0)
-      .setDepth(10000);
+      .setDepth(HUD_TIEFE);
     this.zeigeTimer();
     this.hinweisText = this.add
-      .text(w / 2, this.scale.height - 14, 'E: Kündigung ablegen', { ...stil, fontSize: `${HINWEIS_SCHRIFT_PX}px` })
+      .text(w / 2, this.scale.height - HUD_LAYOUT.hinweisAbstandUnten, 'E: Kündigung ablegen', { ...stil, fontSize: `${HINWEIS_SCHRIFT_PX}px` })
       .setOrigin(0.5, 1)
       .setScrollFactor(0)
-      .setDepth(10000)
+      .setDepth(HUD_TIEFE)
       .setVisible(false);
 
     const zurueck = this.add
-      .rectangle(w - 95, 28, 170, 36, 0x553333)
-      .setStrokeStyle(2, 0xffffff)
+      .rectangle(w - HUD_LAYOUT.zurueckAbstandRechts, HUD_LAYOUT.zurueckY, HUD_LAYOUT.zurueckBreite, HUD_LAYOUT.zurueckHoehe, HUD_LAYOUT.zurueckFarbe)
+      .setStrokeStyle(RAHMEN.staerke, RAHMEN.farbe)
       .setScrollFactor(0)
-      .setDepth(10000)
+      .setDepth(HUD_TIEFE)
       .setInteractive({ useHandCursor: true });
     this.add
-      .text(w - 95, 28, 'Zurück zum Menü', { fontSize: '16px', color: '#ffffff' })
+      .text(w - HUD_LAYOUT.zurueckAbstandRechts, HUD_LAYOUT.zurueckY, 'Zurück zum Menü', { fontSize: `${HUD_LAYOUT.zurueckPx}px`, color: '#ffffff' })
       .setOrigin(0.5)
       .setScrollFactor(0)
-      .setDepth(10001);
+      .setDepth(HUD_TIEFE + 1);
     zurueck.on('pointerdown', () => this.zumMenue());
 
     // Knopf "Inventar" unter "Zurück zum Menü" (nur in Phase "laeuft" wirksam).
     const ik = INVENTAR_KNOPF;
     const inventarFeld = this.add
       .rectangle(ik.x + ik.breite / 2, ik.y + ik.hoehe / 2, ik.breite, ik.hoehe, DIALOG_KNOPF_FARBE)
-      .setStrokeStyle(2, DIALOG_RAHMEN_FARBE)
+      .setStrokeStyle(RAHMEN.staerke, DIALOG_RAHMEN_FARBE)
       .setScrollFactor(0)
       .setDepth(HUD_TIEFE)
       .setInteractive({ useHandCursor: true });
