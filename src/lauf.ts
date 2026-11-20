@@ -1,10 +1,10 @@
 // Frischer Zustand eines Laufs (ohne Phaser): Timer, NPCs, Kaffee, Inventar. Die Szene legt ihn bei jedem Start
-// (Menue, Neustart, Nochmal) neu an; nichts ueberlebt einen Lauf ausser den gespeicherten Infos.
+// (Menue, Neustart, Nochmal) neu an; nichts ueberlebt einen Lauf ausser den gespeicherten Infos und dem Stand der Chef-Gespraeche.
 import { neueWelt } from './npcs.ts';
 import type { NpcWelt } from './npcs.ts';
 import { neuesInventar } from './inventar.ts';
 import type { Inventar } from './inventar.ts';
-import { ladeInfos } from './speicher.ts';
+import { ladeChefZaehler, ladeInfos } from './speicher.ts';
 import type { SpeicherQuelle } from './speicher.ts';
 import { neuerChef } from './chef.ts';
 import type { ChefZustand } from './chef.ts';
@@ -23,7 +23,7 @@ export function neuerLauf(startSekunden: number, speicher: SpeicherQuelle | null
   return {
     zustand: neuerZustand(startSekunden),
     welt: neueWelt(),
-    chef: neuerChef(),
+    chef: { ...neuerChef(), erwischt: ladeChefZaehler(speicher) }, // die Reihe der Chef-Gespraeche geht ueber Laeufe hinweg weiter
     kaffee: false,
     inventar: neuesInventar(ladeInfos(speicher), false),
   };

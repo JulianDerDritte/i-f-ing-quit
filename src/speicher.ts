@@ -6,6 +6,7 @@ import type { InfoEintrag, Inventar } from './inventar.ts';
 
 export const SPEICHER_SCHLUESSEL = 'ifingquit.inventar.v1';
 export const SPEICHER_VERSION = 1;
+export const CHEF_SCHLUESSEL = 'ifingquit.chef.v1';
 
 export interface SpeicherQuelle {
   getItem(schluessel: string): string | null;
@@ -61,13 +62,51 @@ export function speichereInventar(sp: SpeicherQuelle | null, inv: Inventar): boo
   }
 }
 
-// Loescht den Speicher; true, wenn es geklappt hat.
-export function loescheSpeicher(sp: SpeicherQuelle | null): boolean {
+// Stand der Reihe der Chef-Gespraeche (0 bis 2 = Zahl der schon gefuehrten Gespraeche modulo 3); bei jedem Problem
+// (kein Speicher, kein JSON, andere Version, falsche Form, nicht ganzzahlig, ausserhalb 0 bis 2, Wurf): 0.
+export function ladeChefZaehler(sp: SpeicherQuelle | null): number {
+  if (sp === null) return 0;
+  try {
+    const roh = sp.getItem(CHEF_SCHLUESSEL);
+    if (roh === null) return 0;
+    const daten: unknown = JSON.parse(roh);
+    if (typeof daten !== 'object' || daten === null) return 0;
+    const d = daten as Record<string, unknown>;
+    if (d.version !== SPEICHER_VERSION) return 0;
+    const n = d.erwischt;
+    if (typeof n !== 'number' || !Number.isInteger(n) || n < 0 || n > 2) return 0;
+    return n;
+  } catch {
+    return 0;
+  }
+}
+
+// Schreibt den Stand der Reihe (erwischt modulo 3). true, wenn es geschrieben wurde.
+export function speichereChefZaehler(sp: SpeicherQuelle | null, erwischt: number): boolean {
   if (sp === null) return false;
   try {
-    sp.removeItem(SPEICHER_SCHLUESSEL);
+    sp.setItem(CHEF_SCHLUESSEL, JSON.stringify({ version: SPEICHER_VERSION, erwischt: erwischt % 3 }));
     return true;
   } catch {
     return false;
   }
+}
+
+// Nach jedem Erwischen (Start eines Chef-Gespraechs) sofort speichern; liefert, ob es geschrieben wurde.
+export function erwischenSpeichern(chef: { erwischt: number }, sp: SpeicherQuelle | null): boolean {
+  return speichereChefZaehler(sp, chef.erwischt);
+}
+
+// Loescht den Speicher (Infos und Zaehler der Chef-Gespraeche); true nur, wenn beide Entfernungen geklappt haben.
+export function loescheSpeicher(sp: SpeicherQuelle | null): boolean {
+  if (sp === null) return false;
+  let ok = true;
+  for (const schluessel of [SPEICHER_SCHLUESSEL, CHEF_SCHLUESSEL]) {
+    try {
+      sp.removeItem(schluessel);
+    } catch {
+      ok = false;
+    }
+  }
+  return ok;
 }

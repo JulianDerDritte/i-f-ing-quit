@@ -58,7 +58,7 @@ import { aktionsTaste, kaffeeNachAntwort, nahAnKaffee } from './kaffee.ts';
 import { ausGespraech, inventarRechtecke, inventarSeiten, mitKaffee } from './inventar.ts';
 import type { Inventar } from './inventar.ts';
 import { neuerLauf } from './lauf.ts';
-import { holeSpeicher, speichereInventar } from './speicher.ts';
+import { erwischenSpeichern, holeSpeicher, speichereInventar } from './speicher.ts';
 import type { SpeicherQuelle } from './speicher.ts';
 import { NPCS, kontaktNpc, markiereGesprochen, npcPosition, npcsFortschreiben } from './npcs.ts';
 import type { NpcWelt } from './npcs.ts';
@@ -408,6 +408,7 @@ export class SpielScene extends Phaser.Scene {
   private oeffneChefGespraech(): void {
     const e = chefErwischt(this.chef);
     this.chef = e.chef;
+    erwischenSpeichern(this.chef, this.speicher); // sofort, nicht erst am Laufende: Neuladen im Gespraech verliert nichts
     this.dialogIstChef = true;
     this.oeffneGespraech(SZENEN_TEXTE.chefName, e.dialogId, CHEF_DIALOG_KOSTEN);
   }
