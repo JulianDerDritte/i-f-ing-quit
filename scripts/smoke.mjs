@@ -92,6 +92,10 @@ async function pruefeSeite(basis, { praefix = '', extra = false, https = false }
 }
 
 // ---------------------------------------------------------------- Modus 2: veroeffentlichte Adresse
+// Rotproben des Live-Modus gegen die veroeffentlichte Seite (je vier Zustaende, Lauf vom 20.11.2026):
+//   (a) rot am 20.11.2026 gegen falschen erwarteten Titel (scripts/smoke.mjs:22), gruen gegen 3097bb1, rot mit Titelmuster mit Zusatzzeichen (scripts/smoke.mjs:56), wieder gruen
+//   (b) rot am 20.11.2026 gegen Adresse mit nicht vorhandenem Pfad nichtda/, gruen gegen 3097bb1, rot mit nicht vorhandenem Pfad img/seite2/, wieder gruen
+//   (c) rot am 20.11.2026 gegen verlaengerten Bildnamen (scripts/smoke.mjs:75), gruen gegen 3097bb1, rot mit Bildname mit Vorsatz x- (scripts/smoke.mjs:75), wieder gruen
 const adresse = process.argv[2];
 if (adresse !== undefined) {
   const basis = adresse.endsWith('/') ? adresse : `${adresse}/`;
