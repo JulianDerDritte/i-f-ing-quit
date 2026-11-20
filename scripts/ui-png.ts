@@ -20,7 +20,7 @@ import {
   MENUE_LAYOUT,
   MENUE_SPEICHER,
   PALETTE,
-  SPRITE_SKALA,
+  UI_SKALA,
   STUFEN,
   STUFEN_NAMEN,
   SZENEN_TEXTE,
@@ -132,12 +132,12 @@ function hud(rest: number, stufe: (typeof STUFEN)[number], raum: string, mitKaff
   text(bild, stufeText, HUD_LAYOUT.stufeX, HUD_LAYOUT.stufeY, pixelSkala(HUD_LAYOUT.stufePx), 0xffffff, PALETTE.umriss, 0, 0, HUD_LAYOUT.stufeUmbruch);
   const px = (800 - HUD_LAYOUT.plaketteBreite) / 2;
   rechtecke(bild, plaketteRechtecke(px, HUD_LAYOUT.timerY, HUD_LAYOUT.plaketteBreite, HUD_LAYOUT.plaketteHoehe));
-  ueberlagern(bild, skaliert(stoppuhrRaster(true), SPRITE_SKALA), px + 12, HUD_LAYOUT.timerY + HUD_LAYOUT.plaketteHoehe / 2 - 17, true);
+  ueberlagern(bild, skaliert(stoppuhrRaster(true), UI_SKALA), px + 12, HUD_LAYOUT.timerY + HUD_LAYOUT.plaketteHoehe / 2 - 17, true);
   ueberlagern(bild, skaliert(plaketteRaster(zeitZiffern(rest), blinkAn(rest)), 4), px + 52, HUD_LAYOUT.timerY + HUD_LAYOUT.plaketteHoehe / 2 - 18, true);
   knopf(bild, 620, 10, 170, 36, 'zurueck', 'normal', SZENEN_TEXTE.zurueckMenue, pixelSkala(HUD_LAYOUT.zurueckPx), null, VORSCHUB_ENG);
   knopf(bild, INVENTAR_KNOPF.x, INVENTAR_KNOPF.y, INVENTAR_KNOPF.breite, INVENTAR_KNOPF.hoehe, 'inventar', 'hover', SZENEN_TEXTE.inventarKnopf, pixelSkala(INVENTAR_KNOPF.schriftPx));
   if (mitKaffee) {
-    ueberlagern(bild, skaliert(tasseRaster(), SPRITE_SKALA), KAFFEE_HUD.symbolX, KAFFEE_HUD.symbolY, true);
+    ueberlagern(bild, skaliert(tasseRaster(), UI_SKALA), KAFFEE_HUD.symbolX, KAFFEE_HUD.symbolY, true);
     text(bild, SZENEN_TEXTE.kaffee, KAFFEE_HUD.textX, KAFFEE_HUD.textY, pixelSkala(KAFFEE_HUD.schriftPx), 0xffffff, PALETTE.umriss);
   }
   void hudRechtecke;
@@ -166,7 +166,7 @@ function dialog(n: 3 | 4): Raster {
   rechtecke(bild, fensterRechtecke(f.x, f.y, f.breite, f.hoehe, FENSTER_STIL.flaeche, leiste));
   text(bild, 'Empfang', leiste.x + 8, leiste.y + (leiste.h - ZEILE * pixelSkala(DIALOG_NAME_SCHRIFT_PX)) / 2, pixelSkala(DIALOG_NAME_SCHRIFT_PX), FENSTER_STIL.leisteText, null);
   text(bild, knoten.text, d.text.x, d.text.y, pixelSkala(DIALOG_TEXT_SCHRIFT_PX), FENSTER_STIL.text, null, 0, 0, d.text.breite);
-  ueberlagern(bild, skaliert(stoppuhrRaster(false), SPRITE_SKALA), d.kosten.x, d.kosten.y + 2, true);
+  ueberlagern(bild, skaliert(stoppuhrRaster(false), UI_SKALA), d.kosten.x, d.kosten.y + 2, true);
   text(bild, kostenZeile(zeitText(3)), d.kosten.x + 26, d.kosten.y + 2, pixelSkala(DIALOG_KOSTEN_SCHRIFT_PX), FENSTER_STIL.kosten, null);
   d.knoepfe.forEach((k, i) => knopf(bild, k.x, k.y, k.breite, k.hoehe, 'antwort', i === 1 ? 'hover' : 'normal', antwortBeschriftung(z, angeboten[i].antwort), pixelSkala(DIALOG_ANTWORT_SCHRIFT_PX), DIALOG_ANTWORT_EINZUG));
   return bild;
@@ -207,7 +207,7 @@ schreibe('ui-meldung-niederlage.png', meldung(false));
   text(bild, SZENEN_TEXTE.inventarTitel, leiste.x + 8, leiste.y + 5, 2, FENSTER_STIL.leisteText, null);
   const s = pixelSkala(INVENTAR_SCHRIFT_PX);
   text(bild, inventarSeiten(inv)[0], r.info.x, r.info.y, s, FENSTER_STIL.text, null, 0, 0, r.info.breite);
-  ueberlagern(bild, skaliert(blattSymbolRaster(), SPRITE_SKALA), r.gegenstaende.x, r.gegenstaende.y + 2, true);
+  ueberlagern(bild, skaliert(blattSymbolRaster(), UI_SKALA), r.gegenstaende.x, r.gegenstaende.y + 2, true);
   text(bild, `${SZENEN_TEXTE.gegenstaende}${inv.gegenstaende.join(', ')}`, r.gegenstaende.x + 26, r.gegenstaende.y, s, FENSTER_STIL.kosten, null);
   knopf(bild, r.zurueck.x, r.zurueck.y, r.zurueck.breite, r.zurueck.hoehe, 'inventar', 'hover', SZENEN_TEXTE.zurueck, s);
   knopf(bild, r.weiter.x, r.weiter.y, r.weiter.breite, r.weiter.hoehe, 'inventar', 'normal', SZENEN_TEXTE.weiter, s);
@@ -218,7 +218,7 @@ schreibe('ui-meldung-niederlage.png', meldung(false));
 
 // 6. Menue (ohne logo.png: es wird im Spiel als Bild geladen)
 {
-  const bild = skaliert(menueHintergrund(), SPRITE_SKALA);
+  const bild = skaliert(menueHintergrund(), UI_SKALA);
   const L = MENUE_LAYOUT;
   rechtecke(bild, [{ x: 270, y: 20, b: 260, h: 240, farbe: 0x8a4a1c }]);
   text(bild, '(Logo)', 400, 140, 3, 0xffffff, PALETTE.umriss, 0.5, 0.5);

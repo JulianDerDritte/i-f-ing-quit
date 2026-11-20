@@ -3,8 +3,8 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { CHEF_ZELLE, NPC_IDS, PALETTE, SPRITE_SKALA } from '../src/config.ts';
 import { KARTE, bereichAnZelle, zellArt } from '../src/karte.ts';
-import { NPC_SCHRITTE, RICHTUNGEN, SPIELER_SCHRITTE, chefBild, figurBild, npcBild, schattenBild } from '../src/grafik/figuren.ts';
-import { gleich, spiegeln, unterschiedsAnteil } from '../src/grafik/raster.ts';
+import { CHEF_SCHRITTE, NPC_SCHRITTE, RICHTUNGEN, SPIELER_SCHRITTE, chefBild, chefFigurBild, figurBild, npcBild, schattenBild } from '../src/grafik/figuren.ts';
+import { DURCHSICHTIG, gleich, spiegeln, unterschiedsAnteil } from '../src/grafik/raster.ts';
 import { hatFarbe, pruefeSprite } from './grafik-hilfe.ts';
 
 // Rotprobe: rot gesehen am 20.11.2026 (Kennung Wirkstelle der Mutation, je Test mindestens eine, danach wieder grün;
@@ -15,6 +15,12 @@ import { hatFarbe, pruefeSprite } from './grafik-hilfe.ts';
 // N5-teamleitung figuren.ts:110; N5-it figuren.ts:114; N5-vertrieb figuren.ts:118; N6 figuren.ts:200; C1a
 // figuren.ts:212; C1b figuren.ts:68; C1c figuren.ts:84; C2 config.ts:348; C3 config.ts:348; C4 config.ts:348; C5
 // config.ts:348
+// A-012 (Skala 1): Die Zeilennummern der A-009a-Wirkstellen oben sind mit dem Neubau von figuren.ts verschoben (nicht neu
+// gemessen). Neu gemessen, rot gesehen am 20.11.2026 (Wirkstellen in src/grafik/figuren.ts bzw. config.ts, Stand A-012):
+// F-09 Raster/Schatten :380 (Schattenraster 14x6), :251 (Sohlenzeile fehlt); F-09 Farben :254 (Licht/Schatten aus);
+// E8 Töne :166 (hemdLicht), :164 (hoseSchatten), :162 und :179 (haarBraunSchatten), :163 (hautLicht); F-09 Details :193 (Mund),
+// :203 und :204 (Knoten), :253 (Sohle), :229 und :186 (Mund von hinten); F-15 :409 (Chef Laufbild gleich Stehbild),
+// :102 (Schnurrbart), :399 (Schlips von hinten). Nachweiszeilen mit Testnamen: Bericht A-012, Abschnitt Rotproben.
 describe('Spieler-Sprite', () => {
   it('jede Richtung und jedes Bild ist ein Sprite (nicht leer, Umriss am Rand) mit Höhe 28 bis 40 Bildschirmpunkten', () => {
     for (const d of RICHTUNGEN) {
@@ -128,5 +134,66 @@ describe('Chef', () => {
   });
   it('CHEF_ZELLE ist nicht die Startzelle', () => {
     assert.notDeepEqual([...CHEF_ZELLE], [...KARTE.start]);
+  });
+});
+
+// A-012: feinere Figuren im Raster Skala 1. Rotprobe: rot gesehen am 20.11.2026 (Wirkstellen im Bericht A-012)
+describe('Feinere Figuren (A-012)', () => {
+  it('F-09 Raster des Spielers 30 mal 35 Rasterpunkte (heute 16 mal 18), Schatten 28 mal 12', () => {
+    const r = figurBild('ul', 0, false);
+    assert.equal(r.breite, 30);
+    assert.equal(r.hoehe, 35);
+    const s = schattenBild();
+    assert.equal(s.breite, 28);
+    assert.equal(s.hoehe, 12);
+  });
+  it('F-09 Spieler-Stehbild hat mindestens 18 verschiedene Farben (heute 12)', () => {
+    const farben = new Set<number>([...figurBild('ul', 0, false).punkte].filter((f) => f !== DURCHSICHTIG));
+    assert.ok(farben.size >= 18, `${farben.size}`);
+  });
+  it('F-09 Haar, Haut, Hemd und Hose des Spielers haben je drei benannte Töne (Licht, Mittelton, Schatten) im Stehbild, dazu der Umriss', () => {
+    const material: [string, number[]][] = [
+      ['Haar', [PALETTE.haarBraun, PALETTE.haarBraunLicht, PALETTE.haarBraunSchatten]],
+      ['Haut', [PALETTE.haut, PALETTE.hautLicht, PALETTE.hautSchatten]],
+      ['Hemd', [PALETTE.hemd, PALETTE.hemdLicht, PALETTE.hemdSchatten]],
+      ['Hose', [PALETTE.hose, PALETTE.hoseLicht, PALETTE.hoseSchatten]],
+    ];
+    for (const d of ['ul', 'ur'] as const) {
+      const r = figurBild(d, 0, false);
+      for (const [name, toene] of material) {
+        assert.equal(new Set(toene).size, 3, `${name}: drei verschiedene Schlüssel`);
+        for (const t of toene) assert.ok(hatFarbe(r, t), `${d} ${name} ${t.toString(16)}`);
+      }
+      assert.ok(hatFarbe(r, PALETTE.umriss));
+    }
+  });
+  it('F-09 Details: Mund vorn (hinten keiner), Krawattenknoten breiter als die Krawatte, Schuhsohle in den zwei untersten Zeilen', () => {
+    const vorn = figurBild('ul', 0, false);
+    assert.ok(hatFarbe(vorn, PALETTE.mund));
+    assert.ok(!hatFarbe(figurBild('ol', 0, false), PALETTE.mund));
+    const krawatte: number[] = [PALETTE.krawatteRot, PALETTE.krawatteLicht, PALETTE.krawatteDunkel];
+    const breite = (y: number): number => Array.from({ length: vorn.breite }, (_, x) => vorn.punkte[y * vorn.breite + x]).filter((f) => krawatte.includes(f)).length;
+    assert.ok(breite(15) > breite(20), `Knoten ${breite(15)} gegen Krawatte ${breite(20)}`);
+    const sohle = (y: number): number => Array.from({ length: vorn.breite }, (_, x) => vorn.punkte[y * vorn.breite + x]).filter((f) => f === PALETTE.schuhSohle).length;
+    assert.ok(sohle(vorn.hoehe - 2) >= 10 && sohle(vorn.hoehe - 3) >= 10, `Sohle ${sohle(vorn.hoehe - 3)}/${sohle(vorn.hoehe - 2)}`);
+  });
+});
+
+describe('Chef in vier Richtungen (A-012)', () => {
+  it('F-15 jede Richtung des Chefs: Stehbild und zwei Laufbilder sind Sprites, die Laufbilder unterscheiden sich vom Stehbild und voneinander', () => {
+    for (const d of RICHTUNGEN) {
+      const stehen = chefFigurBild(d, 0, false);
+      assert.deepEqual(pruefeSprite(stehen), [], `${d} Stehbild`);
+      assert.equal(stehen.hoehe, 35);
+      for (let s = 0; s < CHEF_SCHRITTE; s++) {
+        assert.deepEqual(pruefeSprite(chefFigurBild(d, s, true)), [], `${d} Lauf ${s}`);
+        assert.ok(!gleich(chefFigurBild(d, s, true), stehen), `${d} Lauf ${s} gleich Stehbild`);
+      }
+      assert.ok(!gleich(chefFigurBild(d, 0, true), chefFigurBild(d, 1, true)), `${d} Laufbilder gleich`);
+    }
+  });
+  it('F-15 der Chef trägt Schnurrbart, roten Schlips und Anzug nach vorn (unten), von hinten keinen Schlips', () => {
+    for (const d of ['ul', 'ur'] as const) for (const f of [PALETTE.schnurrbart, PALETTE.krawatteRot, PALETTE.anzugLicht]) assert.ok(hatFarbe(chefFigurBild(d, 0, false), f), `${d} ${f.toString(16)}`);
+    assert.ok(!hatFarbe(chefFigurBild('ol', 0, false), PALETTE.krawatteRot));
   });
 });

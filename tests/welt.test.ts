@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { CHEF_ZELLE, PALETTE, PFLANZEN_ZELLEN, SPRITE_SKALA, TEPPICH_ZELLEN, KACHEL_BREITE, KACHEL_HOEHE } from '../src/config.ts';
 import { KARTE, zellArt } from '../src/karte.ts';
 import { gitterZuBild } from '../src/projektion.ts';
-import { bodenGroesse, bodenRaster, fensterZellen, istTuerZelle, istWandZelle, lampenZellen, wandRaster, weltObjekte } from '../src/grafik/welt.ts';
+import { SCHATTEN_BREITE, bodenGroesse, bodenRaster, fensterZellen, imSchatten, istTuerZelle, istWandZelle, lampenZellen, wandRaster, weltObjekte } from '../src/grafik/welt.ts';
 import { gleich } from '../src/grafik/raster.ts';
 import type { Raster } from '../src/grafik/raster.ts';
 import { pruefeSprite } from './grafik-hilfe.ts';
@@ -36,6 +36,11 @@ function erreichbar(liste: readonly [number, number][], start: [number, number])
 // config.ts:363; PO1d config.ts:363; PO2-wand welt.ts:262; PO2-tisch welt.ts:265; PO2-maschine welt.ts:267; PO2-sturz
 // welt.ts:271; PO2-schild welt.ts:284; PO2-chef welt.ts:286; PO2-pflanze welt.ts:277; PO3a welt.ts:262; PO3b
 // welt.ts:286; PO4a welt.ts:265; PO4b welt.ts:92; PO4c moebel.ts:68; D1a welt.ts:117; D1b welt.ts:117
+// A-012 (Skala 1): Die Zeilennummern der A-009a-Wirkstellen oben sind mit dem Neubau von welt.ts verschoben (nicht neu
+// gemessen). Neu gemessen, rot gesehen am 20.11.2026 (src/grafik/welt.ts, Stand A-012): Größe :179 (Breite +1); F-22 :291;
+// F-23 :229 (Kratzer), :230 (Fleck), :228 und :231 (Glanz), :229 (Zufall); F-24 :238; F-25 :249; F-27 :100 (Sprosse), :102
+// (Spiegelung), :103 (Verlauf), :97 (Brett); F-28 :128; E1 :212 (Ablage/Start), :213 (Tür), :216 (Band zu schmal), :208
+// (Band zu breit), :226 (Fuge vor Schatten); F-33 :285 und :303. Nachweiszeilen mit Testnamen: Bericht A-012, Rotproben.
 describe('Teppich (TEPPICH_ZELLEN)', () => {
   it('keine Teppichzelle ist Wand, Tisch, Maschine oder die Startzelle', () => {
     for (const [x, y] of TEPPICH_ZELLEN) {
@@ -70,7 +75,8 @@ describe('Boden-Raster', () => {
     const Y = Math.floor(b.y / SPRITE_SKALA);
     return boden.punkte[Y * boden.breite + X];
   };
-  it('Größe: 800 x 400 Rasterpunkte (1600 x 800 Bildschirmpunkte)', () => {
+  // A-012 (A8): Titel berichtigt, mit Skala 1 sind es 1600 x 800 Rasterpunkte (= 1600 x 800 Weltpunkte); die Rechnung mit SPRITE_SKALA bleibt
+  it('Größe: 1600 x 800 Rasterpunkte (1600 x 800 Weltpunkte)', () => {
     assert.equal(boden.breite * SPRITE_SKALA, (KARTE.breite + KARTE.hoehe) * (KACHEL_BREITE / 2));
     assert.equal(boden.hoehe * SPRITE_SKALA, (KARTE.breite + KARTE.hoehe) * (KACHEL_HOEHE / 2));
   });
@@ -194,5 +200,81 @@ describe('Pflanzen und Welt-Objekte', () => {
       if (o.art !== 'wand' && o.art !== 'sturz') assert.deepEqual(pruefeSprite(r), [], o.schluessel);
     }
     assert.ok(gesehen.size < 60, `${gesehen.size} Texturen`);
+  });
+});
+
+// A-012: feinere Welt (Skala 1). Rotprobe: rot gesehen am 20.11.2026 (Wirkstellen im Bericht A-012).
+describe('Feinere Welt (A-012)', () => {
+  const g = bodenGroesse(KARTE);
+  const boden = bodenRaster(KARTE);
+  const farbeAn = (gx: number, gy: number, tx: number, ty: number): number => {
+    const b = gitterZuBild(gx + tx, gy + ty);
+    const X = Math.floor((b.x - g.ursprungX) / SPRITE_SKALA);
+    const Y = Math.floor(b.y / SPRITE_SKALA);
+    return boden.punkte[Y * boden.breite + X];
+  };
+  const schatten = [PALETTE.fliesenHellSchatten, PALETTE.fliesenDunkelSchatten, PALETTE.parkettHellSchatten, PALETTE.parkettDunkelSchatten];
+  it('F-22 die vier Zellen des Chef-Schreibtischs (27,3), (28,3), (27,4), (28,4) tragen in weltObjekte die Art tisch', () => {
+    const objekte = weltObjekte(KARTE);
+    for (const [x, y] of [[27, 3], [28, 3], [27, 4], [28, 4]] as const) assert.ok(objekte.some((o) => o.art === 'tisch' && o.x === x && o.y === y), `${x},${y}`);
+  });
+  it('F-23 Fliesenboden: Fugen, Glanzlichter und feste Gebrauchsspuren (Kratzer, Fleck) im Boden-Raster, zweimal gerechnet gleich (kein Zufall)', () => {
+    for (const f of [PALETTE.fuge, PALETTE.fliesenGlanz, PALETTE.fliesenKratzer, PALETTE.fliesenFleck]) assert.ok(boden.punkte.includes(f), f.toString(16));
+    assert.ok(gleich(boden, bodenRaster(KARTE)));
+  });
+  it('F-24 Parkett im Chefbüro: Holzmaserung und Brettfugen im Boden-Raster', () => {
+    assert.ok(boden.punkte.includes(PALETTE.parkettMaser));
+    assert.ok(boden.punkte.includes(PALETTE.parkettFuge));
+  });
+  it('F-25 roter Teppichläufer: Borte, Muster und dunkler Rand, TEPPICH_ZELLEN unverändert (38 Zellen, beginnt bei (9,7), endet bei (26,5))', () => {
+    for (const f of [PALETTE.teppich, PALETTE.teppichLicht, PALETTE.teppichDunkel, PALETTE.teppichBorte]) assert.ok(boden.punkte.includes(f), f.toString(16));
+    assert.equal(TEPPICH_ZELLEN.length, 38);
+    assert.deepEqual(TEPPICH_ZELLEN[0], [9, 7]);
+    assert.deepEqual(TEPPICH_ZELLEN[TEPPICH_ZELLEN.length - 1], [26, 5]);
+  });
+  it('F-27 Wand mit Fenster: Brett, Rahmen mit Kreuzsprossen, Scheibe mit Spiegelung und Verlauf', () => {
+    const r = wandRaster({ maske: 0, tuerMaske: 0, fensterLinks: true, fensterRechts: false, lampe: false });
+    for (const f of [PALETTE.fensterBrett, PALETTE.fensterRahmen, PALETTE.fenster, PALETTE.fensterLicht, PALETTE.fensterTief]) assert.ok(r.punkte.includes(f), f.toString(16));
+    // Kreuzsprosse: eine senkrechte Rahmenlinie in der Fenstermitte (Spalte 15 oder 16 der linken Seitenfläche)
+    for (const x of [15, 16]) {
+      let n = 0;
+      for (let y = 0; y < r.hoehe; y++) if (r.punkte[y * r.breite + x] === PALETTE.fensterRahmen) n++;
+      assert.ok(n >= 20, `Spalte ${x}: ${n} Rahmenpunkte`);
+    }
+  });
+  it('F-28 Deckenlicht: der Leuchtbalken hat Kern, Glanz und Rand', () => {
+    const r = wandRaster({ maske: 0, tuerMaske: 0, fensterLinks: false, fensterRechts: false, lampe: true });
+    for (const f of [PALETTE.lampeKern, PALETTE.lampe, PALETTE.lampeRand]) assert.ok(r.punkte.includes(f), f.toString(16));
+  });
+  it('E1 Schattenband: Schattenton an Zelle (14,3) bei (0.15, 0.5), weil der Westnachbar (13,3) ein Tisch ist', () => {
+    assert.equal(zellArt(KARTE, 13, 3), 'tisch');
+    assert.ok(schatten.includes(farbeAn(14, 3, 0.15, 0.5)), farbeAn(14, 3, 0.15, 0.5).toString(16));
+    assert.ok(imSchatten(KARTE, 'fliese', 14, 3, 0.15, 0.5));
+  });
+  it('E1 Schattenband: an freien Stellen und in der Zellmitte kein Schattenton (Band höchstens 0,4 breit)', () => {
+    assert.ok(SCHATTEN_BREITE <= 0.4);
+    assert.ok(!schatten.includes(farbeAn(14, 3, 0.5, 0.5)));
+    assert.ok(!schatten.includes(farbeAn(20, 8, 0.15, 0.5)));
+    assert.ok(!imSchatten(KARTE, 'fliese', 14, 3, 0.3, 0.5));
+  });
+  it('E1 Schattenband: nie auf Ablage- (27,5), Start- (4,13) und Türzellen (9,7), obwohl dort feste Nachbarn stehen', () => {
+    assert.ok(!schatten.includes(farbeAn(27, 5, 0.1, 0.1)));
+    assert.ok(!imSchatten(KARTE, 'ablage', 27, 5, 0.1, 0.1));
+    assert.ok(!imSchatten(KARTE, 'start', 27, 5, 0.1, 0.1)); // Art start schließt das Band aus, auch wo feste Nachbarn stehen
+    assert.ok(!imSchatten(KARTE, 'start', 4, 13, 0.1, 0.1));
+    assert.ok(!imSchatten(KARTE, 'teppich', 9, 7, 0.2, 0.1));
+    assert.ok(!schatten.includes(farbeAn(9, 7, 0.2, 0.1)));
+    assert.equal(zellArt(KARTE, 9, 6), 'wand');
+  });
+  it('F-33 Blöcke und Möbel stehen auf dem Eckpunkt (x+1, y+1), Pflanzen auf der Zellmitte plus 4 Weltpunkte', () => {
+    for (const o of weltObjekte(KARTE)) {
+      if (o.art === 'wand' || o.art === 'tisch' || o.art === 'maschine' || o.art === 'sturz') {
+        const s = gitterZuBild(o.x + 1, o.y + 1);
+        assert.deepEqual([o.bildX, o.bildY], [s.x, s.y], `${o.art} ${o.x},${o.y}`);
+      } else if (o.art === 'pflanze') {
+        const c = gitterZuBild(o.x + 0.5, o.y + 0.5);
+        assert.deepEqual([o.bildX, o.bildY], [c.x, c.y + 4], `Pflanze ${o.x},${o.y}`);
+      }
+    }
   });
 });

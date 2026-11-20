@@ -35,7 +35,8 @@ export function npcSchluessel(id: NpcId, richtung: Richtung, schritt: number, be
 }
 
 export function registriereWelt(textures: Phaser.Textures.TextureManager): void {
-  rasterAlsTextur(textures, BODEN_TEXTUR, bodenRaster(KARTE));
+  // Der Boden ist teuer zu rechnen (1600 x 800 Punkte): nur, wenn die Textur noch fehlt (Szenenneustart).
+  if (!textures.exists(BODEN_TEXTUR)) rasterAlsTextur(textures, BODEN_TEXTUR, bodenRaster(KARTE));
   for (const o of weltObjekte(KARTE)) {
     if (!textures.exists(o.schluessel)) rasterAlsTextur(textures, o.schluessel, o.raster());
   }

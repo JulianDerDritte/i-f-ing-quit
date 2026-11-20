@@ -93,26 +93,30 @@ export function wandSchluessel(o: WandOpt): string {
 }
 
 function fensterMalen(Xl: number, v: number): number {
-  // Fenster in einer Seitenflaeche (Xl 0..15): Brett, Rahmen, Scheibe mit Glanz
-  if (v === 9 && Xl >= 1 && Xl <= 14) return P.fensterBrett;
-  if (Xl < 2 || Xl > 13 || v < 10 || v > 22) return -1;
-  if (Xl === 2 || Xl === 13 || v === 10 || v === 22 || Xl === 7 || Xl === 8 || v === 16) return P.fensterRahmen;
-  return (Xl + v) % 9 < 2 ? P.fensterLicht : P.fenster;
+  // Fenster in einer Seitenflaeche (Xl 0..31): Brett, Rahmen mit Kreuzsprossen, Scheibe mit Verlauf und Spiegelung
+  if (v >= 18 && v <= 19 && Xl >= 2 && Xl <= 29) return v === 19 ? P.fensterBrett : P.wandNaht;
+  if (Xl < 4 || Xl > 27 || v < 20 || v > 45) return -1;
+  if (Xl <= 5 || Xl >= 26 || v <= 21 || v >= 44) return P.fensterRahmen;
+  if (Xl === 15 || Xl === 16 || v === 32 || v === 33) return P.fensterRahmen;
+  const spiegel = (Xl + v) % 18;
+  if (spiegel < 3 || spiegel === 4) return P.fensterLicht;
+  return v < 32 ? P.fensterTief : P.fenster;
 }
 
 function wandMaler(o: WandOpt): BlockMaler {
   const seite = (Xl: number, v: number, haupt: number, licht: number, fenster: boolean, jamb: boolean): number => {
-    if (jamb) return v >= WAND_ZEILEN - 1 ? P.tuerHolzLicht : P.tuerHolz;
-    if (v === WAND_ZEILEN - 1) return P.wandKopfLicht;
-    if (v === WAND_ZEILEN - 2) return P.wandKopf;
-    if (v <= 3) return P.sockel;
-    if (v === 4) return P.sockelLicht;
+    if (jamb) return v >= WAND_ZEILEN - 2 ? P.tuerHolzLicht : P.tuerHolz;
+    if (v >= WAND_ZEILEN - 2) return P.wandKopfLicht;
+    if (v >= WAND_ZEILEN - 4) return P.wandKopf;
+    if (v <= 7) return P.sockel;
+    if (v <= 9) return P.sockelLicht;
     if (fenster) {
       const f = fensterMalen(Xl, v);
       if (f !== -1) return f;
     }
-    if (v === 17) return P.wandNaht;
-    return v > 17 ? licht : haupt;
+    if (v === 34) return P.wandNaht;
+    if (Xl % 16 === 0 && v >= 10 && v < 34) return P.wandNaht; // Paneelfuge
+    return v > 34 ? licht : haupt;
   };
   const tuerLinks = (o.tuerMaske & bit(0, 1)) !== 0;
   return {
@@ -124,10 +128,10 @@ function wandMaler(o: WandOpt): BlockMaler {
         if (a < 0.33 && b < 0.12) return P.lampe;
         if (a < 0.38 && b < 0.16) return P.lampeRand;
       }
-      return (X + Yb) % 8 === 0 ? P.wandKopfLicht : P.wandKopf;
+      return (X + Yb) % 16 < 2 ? P.wandKopfLicht : P.wandKopf;
     },
     links: (_u, v, X) => seite(X, v, P.wandLinks, P.wandLinksLicht, o.fensterLinks, tuerLinks),
-    rechts: (_u, v, X) => seite(X - 16, v, P.wandRechts, P.wandRechtsLicht, o.fensterRechts, false),
+    rechts: (_u, v, X) => seite(X - 32, v, P.wandRechts, P.wandRechtsLicht, o.fensterRechts, false),
   };
 }
 
@@ -200,18 +204,38 @@ export function bodenRaster(karte: Karte, teppichZellen: readonly [number, numbe
   return r;
 }
 
+// Breite des Schattenbands neben festen Zellen (Anteil der Zelle); hoechstens 0,4, damit die Zellmitte hell bleibt.
+export const SCHATTEN_BREITE = 0.28;
+
+// Schattenband auf der Lichtseite (West- und Nordkante), wenn dort Wand, Tisch oder Maschine steht; nie auf Start-, Ablage- und Tuerzellen.
+export function imSchatten(karte: Karte, art: Boden, gx: number, gy: number, tx: number, ty: number): boolean {
+  if (art === 'ablage' || art === 'start' || art === 'wand') return false;
+  if (istTuerZelle(karte, gx, gy)) return false;
+  const west = zellArt(karte, gx - 1, gy) !== 'boden';
+  const nord = zellArt(karte, gx, gy - 1) !== 'boden';
+  return (west && tx < SCHATTEN_BREITE) || (nord && ty < SCHATTEN_BREITE);
+}
+
 function bodenFarbe(karte: Karte, teppich: ReadonlySet<string>, art: Boden, gx: number, gy: number, tx: number, ty: number, X: number, Y: number): number {
   const d = Math.min(tx, ty, 1 - tx, 1 - ty);
+  const schatten = imSchatten(karte, art, gx, gy, tx, ty);
   let farbe: number;
   if (art === 'wand') return P.fuge;
   if (art === 'fliese') {
-    if (d < 0.07) farbe = P.fuge;
-    else if (tx < 0.15 || ty < 0.15) farbe = P.fliesenGlanz;
-    else farbe = (gx + gy) % 2 === 0 ? P.fliesenHell : P.fliesenDunkel;
+    const hell = (gx + gy) % 2 === 0;
+    if (d < 0.04) farbe = P.fuge;
+    else if (schatten) farbe = hell ? P.fliesenHellSchatten : P.fliesenDunkelSchatten;
+    else if (d < 0.08 && (tx < 0.08 || ty < 0.08)) farbe = P.fliesenGlanz;
+    else if ((gx * 7 + gy * 13) % 11 === 0 && ty > 0.25 && ty < 0.65 && Math.abs(tx - (ty * 0.6 + 0.3)) < 0.012) farbe = P.fliesenKratzer;
+    else if ((gx * 5 + gy * 3) % 17 === 0 && (tx - 0.6) * (tx - 0.6) + (ty - 0.3) * (ty - 0.3) < 0.006) farbe = P.fliesenFleck;
+    else if ((X + 2 * Y) % 96 < 3 && !schatten && d > 0.1) farbe = P.fliesenGlanz;
+    else farbe = hell ? P.fliesenHell : P.fliesenDunkel;
   } else if (art === 'parkett') {
     const s = X + 2 * Y;
-    const brett = Math.floor(s / 6);
-    if (s % 6 === 0 || (X - 2 * Y + brett * 5) % 24 === 0) farbe = P.parkettFuge;
+    const brett = Math.floor(s / 12);
+    if (s % 12 === 0 || (X - 2 * Y + brett * 10 + 4800) % 48 === 0) farbe = P.parkettFuge;
+    else if (schatten) farbe = brett % 2 === 0 ? P.parkettHellSchatten : P.parkettDunkelSchatten;
+    else if ((X * 3 + Y * 5 + brett * 11) % 19 === 0) farbe = P.parkettMaser;
     else farbe = brett % 2 === 0 ? P.parkettHell : P.parkettDunkel;
   } else if (art === 'teppich') {
     // Abstand zu Kanten, an denen kein Teppich weitergeht
@@ -220,13 +244,15 @@ function bodenFarbe(karte: Karte, teppich: ReadonlySet<string>, art: Boden, gx: 
     if (!teppich.has(`${gx},${gy - 1}`)) m = Math.min(m, ty);
     if (!teppich.has(`${gx + 1},${gy}`)) m = Math.min(m, 1 - tx);
     if (!teppich.has(`${gx},${gy + 1}`)) m = Math.min(m, 1 - ty);
-    if (m < 0.07) farbe = P.teppichDunkel;
-    else if (m < 0.14) farbe = P.teppichLicht;
-    else farbe = (X + Y) % 4 === 0 ? P.teppichLicht : P.teppich;
+    if (m < 0.035) farbe = P.teppichDunkel;
+    else if (m < 0.07) farbe = P.teppichLicht;
+    else if (m >= 0.1 && m < 0.125) farbe = P.teppichBorte;
+    else if (schatten) farbe = P.teppichDunkel;
+    else farbe = (X + 2 * Y) % 24 < 2 || (X - 2 * Y + 4800) % 24 < 2 ? P.teppichLicht : P.teppich;
   } else if (art === 'ablage') {
-    farbe = d < 0.07 ? P.gelbDunkel : ABLAGE_FARBE;
+    farbe = d < 0.035 ? P.gelbDunkel : ABLAGE_FARBE;
   } else {
-    farbe = d < 0.07 ? P.fuge : d < 0.14 ? P.hemdSchatten : P.startWeiss;
+    farbe = d < 0.035 ? P.fuge : d < 0.07 ? P.hemdSchatten : P.startWeiss;
   }
   // Tuerschwelle: schmaler Metallstreifen quer zur Wandlinie
   if (istTuerZelle(karte, gx, gy)) {
@@ -295,7 +321,7 @@ export interface Ausgabe {
 }
 
 // Ganzes Bild (Boden plus Objekte nach Tiefe) in Rasterpunkten, mit `rand` Zeilen Platz oberhalb fuer hohe Bloecke.
-export function weltBildRaster(karte: Karte, extra: readonly Ausgabe[] = [], rand = 34): Raster {
+export function weltBildRaster(karte: Karte, extra: readonly Ausgabe[] = [], rand = 70): Raster {
   const g = bodenGroesse(karte);
   const boden = bodenRaster(karte);
   const bild = neuesRaster(g.breite, g.hoehe + rand);

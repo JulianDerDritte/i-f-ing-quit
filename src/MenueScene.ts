@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { MENUE_LAYOUT, MENUE_SPEICHER, PALETTE, STUFEN, STUFEN_NAMEN, SPRITE_SKALA, SZENEN_TEXTE, TIMER_SEKUNDEN, zeitText } from './config.ts';
+import { MENUE_LAYOUT, MENUE_SPEICHER, PALETTE, STUFEN, STUFEN_NAMEN, SZENEN_TEXTE, UI_SKALA, TIMER_SEKUNDEN, zeitText } from './config.ts';
 import { auswahl } from './auswahl.ts';
 import { holeSpeicher, ladeInfos, loescheSpeicher } from './speicher.ts';
 import { PixelText, knopfBauen, pixelTexteAufraeumen } from './grafik/pixeltext.ts';
@@ -23,7 +23,7 @@ export class MenueScene extends Phaser.Scene {
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => pixelTexteAufraeumen(this.textures));
     // Buerohintergrund (blau, Deckenlinien, Deckenlicht, Fenster, Fliesen mit Teppich) statt weissem Rechteck.
     rasterAlsTextur(this.textures, 'menue-bg', menueHintergrund());
-    this.add.image(0, 0, 'menue-bg').setOrigin(0, 0).setScale(SPRITE_SKALA).setDepth(-1);
+    this.add.image(0, 0, 'menue-bg').setOrigin(0, 0).setScale(UI_SKALA).setDepth(-1);
     this.add.image(w / 2, L.logoY, 'logo').setDisplaySize(L.logoGroesse, L.logoGroesse);
     new PixelText(this, w / 2, L.titelY, SZENEN_TEXTE.menueTitel, { skala: pixelSkala(L.titelPx), farbe: 0xdfe6ff, rand: PALETTE.umriss, ox: 0.5, oy: 0.5 });
 

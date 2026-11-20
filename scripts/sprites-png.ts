@@ -7,7 +7,7 @@ import { crc32, deflateSync } from 'node:zlib';
 import { NPC_IDS } from '../src/config.ts';
 import { KARTE } from '../src/karte.ts';
 import { gitterZuBild } from '../src/projektion.ts';
-import { RICHTUNGEN, chefBild, figurBild, npcBild, schattenBild } from '../src/grafik/figuren.ts';
+import { RICHTUNGEN, chefBild, chefFigurBild, figurBild, npcBild, schattenBild } from '../src/grafik/figuren.ts';
 import { ablageMarkierung, maschineRaster, pflanzeRaster, schildRaster, tischRaster } from '../src/grafik/moebel.ts';
 import { weltBildRaster } from '../src/grafik/welt.ts';
 import { neuesRaster, rasterAlsRgba, ueberlagern } from '../src/grafik/raster.ts';
@@ -88,7 +88,7 @@ schreibe(
     RICHTUNGEN.map((d) => [figurBild(d, 0, false), ...[0, 1, 2, 3].map((s) => figurBild(d, s, true))]),
     HG,
   ),
-  6,
+  4,
 );
 schreibe(
   'figur-npcs.png',
@@ -96,9 +96,10 @@ schreibe(
     NPC_IDS.map((id) => [...(['ul', 'ur', 'ol', 'or'] as const).map((d) => npcBild(id, d, 0, false)), npcBild(id, 'ul', 0, true), npcBild(id, 'ul', 1, true)]),
     HG,
   ),
-  6,
+  4,
 );
-schreibe('moebel.png', blatt([[tischRaster(0), tischRaster(1), tischRaster(2), maschineRaster(), pflanzeRaster()], [chefBild(), schildRaster('CHEF'), ablageMarkierung(), schattenBild()]], HG), 6);
+schreibe('figur-chef.png', blatt([(['ul', 'ur', 'ol', 'or'] as const).map((d) => chefFigurBild(d, 0, false)).concat([chefBild(), chefFigurBild('ul', 0, true), chefFigurBild('ul', 1, true)])], HG), 4);
+schreibe('moebel.png', blatt([[tischRaster(0), tischRaster(1), tischRaster(2), maschineRaster(), pflanzeRaster()], [chefBild(), schildRaster('CHEF'), ablageMarkierung(), schattenBild()]], HG), 4);
 
 // Welt mit Figur am Start und den NPCs an ihren Startpositionen
 const welt = neueWelt();
@@ -114,8 +115,13 @@ const extra = [
 ];
 const gesamt = weltBildRaster(KARTE, extra);
 schreibe('welt-gesamt.png', gesamt, 1);
-const m = 34;
-// Ausschnitte in Rasterpunkten (Ursprung des Bodens + Rand m)
-schreibe('welt-vorzimmer.png', ausschnitt(gesamt, 150, m + 20, 300, 190), 4);
-schreibe('welt-chefbuero.png', ausschnitt(gesamt, 420, m + 20, 300, 190), 4);
-schreibe('welt-tuer.png', ausschnitt(gesamt, 280, m + 40, 300, 190), 4);
+const m = 70; // = Rand von weltBildRaster (Rasterzeilen ueber dem Boden)
+// Ausschnitte in Rasterpunkten (Ursprung des Bodens + Rand m); Skala 1: ein Rasterpunkt = ein Weltpunkt, im Spiel zoomt die Kamera auf 2
+schreibe('welt-vorzimmer.png', ausschnitt(gesamt, 300, m + 40, 600, 380), 2);
+schreibe('welt-chefbuero.png', ausschnitt(gesamt, 840, m + 40, 600, 380), 2);
+schreibe('welt-tuer.png', ausschnitt(gesamt, 560, m + 80, 600, 380), 2);
+// Spielfenster im Zoom: 400 x 320 Weltpunkte um die Figur am Start (Kamerazentrum Figur minus 15), mit 2 skaliert = 800 x 640 Bildpunkte
+const startBild = gitterZuBild(KARTE.start[0] + 0.5, KARTE.start[1] + 0.5);
+const zx = Math.round(startBild.x + 576) - 200; // 576 = Ursprung des Bodens (Kartenhoehe * Kachelbreite / 2)
+const zy = Math.round(startBild.y - 15) + m - 160;
+schreibe('welt-zoom-start.png', ausschnitt(gesamt, zx, zy, 400, 320), 2);

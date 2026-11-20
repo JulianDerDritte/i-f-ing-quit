@@ -5,7 +5,6 @@ import {
   FENSTER_STIL,
   FIGUR_DARSTELLUNG,
   HUD_LAYOUT,
-  KAMERA_LERP,
   MELDUNG_LAYOUT,
   PALETTE,
   SZENEN_TEXTE,
@@ -22,8 +21,7 @@ import {
   INVENTAR_TIEFE,
   INVENTAR_TITEL_SCHRIFT_PX,
   SPRITE_SKALA,
-  KACHEL_BREITE,
-  KACHEL_HOEHE,
+  UI_SKALA,
   KAFFEE_HINWEIS_TEXT,
   KAFFEE_HUD,
   MASCHINE_HOEHE,
@@ -38,7 +36,6 @@ import {
   OVERLAY_ABDUNKLUNG,
   STUFEN_NAMEN,
   VERSCHUETTET_MELDUNG,
-  WAND_HOEHE,
   zeitText,
 } from './config.ts';
 import type { NpcId, Stufe } from './config.ts';
@@ -91,6 +88,7 @@ import type { KnopfTeil } from './grafik/pixeltext.ts';
 import { blinkAn, fensterRechtecke, plaketteRaster, plaketteRechtecke, stufenZeile, zeitZiffern } from './grafik/ui.ts';
 import { VORSCHUB_ENG, ZEILE, pixelSkala } from './grafik/schrift.ts';
 import { bodenGroesse, weltObjekte } from './grafik/welt.ts';
+import { anzeigePunkt, pruefeZuordnung, richteKamerasEin, weltTextSkala } from './grafik/kamera.ts';
 
 const TASTEN = 'W,A,S,D,UP,LEFT,DOWN,RIGHT';
 
@@ -114,6 +112,8 @@ export class SpielScene extends Phaser.Scene {
   private dialogIstChef = false; // das offene Gespraech ist ein Chef-Gespraech (danach beginnt die Schutzfrist)
   private npcSchatten: Phaser.GameObjects.Image[] = [];
   private folgeZiel!: Phaser.GameObjects.Zone;
+  private weltKamera!: Phaser.Cameras.Scene2D.Camera; // zoomt die Spielwelt
+  private uiKamera!: Phaser.Cameras.Scene2D.Camera; // Oberflaeche ohne Zoom
   private raumText!: PixelText;
   private plaketteBild!: Phaser.GameObjects.Image;
   private plaketteSchluessel: string | null = null;
@@ -179,24 +179,14 @@ export class SpielScene extends Phaser.Scene {
     // Dynamische Textur-Texte und die Plakette beim Ende der Szene freigeben (Neustart, Menue).
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => pixelTexteAufraeumen(this.textures));
     registriereUi(this.textures);
-    this.zeichneKarte();
 
-    registriereFiguren(this.textures);
+    // Kameras (A-012): die Hauptkamera zoomt die Welt, eine zweite Kamera ohne Zoom zeigt die Oberflaeche.
     const bild = gitterZuBild(this.pos.x, this.pos.y);
-    // Pixel-Figur: Schatten und Bild, Fusspunkt unten Mitte; Blick am Anfang nach rechts unten (zur ersten Tuer)
-    this.figZ = neuerFigurZustand(bild.x, bild.y, 'ur');
-    this.figurSchatten = this.add.image(bild.x, bild.y, 'schatten').setScale(SPRITE_SKALA).setAlpha(FIGUR_DARSTELLUNG.schattenAlpha);
-    this.figurBild = this.add.image(bild.x, bild.y, figurSchluessel('ur', 0, false)).setOrigin(0.5, 1).setScale(SPRITE_SKALA);
     this.folgeZiel = this.add.zone(bild.x, bild.y, 1, 1);
-
-    const cam = this.cameras.main;
-    cam.setBounds(
-      -KARTE.hoehe * (KACHEL_BREITE / 2),
-      -WAND_HOEHE,
-      (KARTE.breite + KARTE.hoehe) * (KACHEL_BREITE / 2),
-      (KARTE.breite + KARTE.hoehe) * (KACHEL_HOEHE / 2) + WAND_HOEHE,
-    );
-    cam.startFollow(this.folgeZiel, true, KAMERA_LERP, KAMERA_LERP);
+    const kameras = richteKamerasEin(this.cameras, this.folgeZiel, KARTE);
+    this.weltKamera = kameras.haupt;
+    this.uiKamera = kameras.oberflaeche;
+    this.uiKamera.ignore(this.folgeZiel);
 
     // Zustand und Eingabe frisch: keine haengende Taste, Timer voll, keine Meldung.
     kb.resetKeys();
@@ -219,30 +209,74 @@ export class SpielScene extends Phaser.Scene {
     this.verschuettetRest = 0;
     this.inventarSeitenTexte = [];
     this.inventarSeite = 0;
-    this.npcBilder = NPCS.map((d) => this.add.image(0, 0, npcSchluessel(d.id, 'ur', 0, false)).setOrigin(0.5, 1).setScale(SPRITE_SKALA));
-    this.npcSchatten = NPCS.map(() => this.add.image(0, 0, 'schatten').setScale(SPRITE_SKALA).setAlpha(FIGUR_DARSTELLUNG.schattenAlpha));
-    this.npcZ = NPCS.map((d) => {
-      const p = npcPosition(this.welt, d.id);
-      const b = gitterZuBild(p.x, p.y);
-      return neuerFigurZustand(b.x, b.y, 'ur');
+
+    this.inWelt(() => {
+      this.zeichneKarte();
+      registriereFiguren(this.textures);
+      // Pixel-Figur: Schatten und Bild, Fusspunkt unten Mitte; Blick am Anfang nach rechts unten (zur ersten Tuer)
+      this.figZ = neuerFigurZustand(bild.x, bild.y, 'ur');
+      this.figurSchatten = this.add.image(bild.x, bild.y, 'schatten').setScale(SPRITE_SKALA).setAlpha(FIGUR_DARSTELLUNG.schattenAlpha);
+      this.figurBild = this.add.image(bild.x, bild.y, figurSchluessel('ur', 0, false)).setOrigin(0.5, 1).setScale(SPRITE_SKALA);
+      this.npcBilder = NPCS.map((d) => this.add.image(0, 0, npcSchluessel(d.id, 'ur', 0, false)).setOrigin(0.5, 1).setScale(SPRITE_SKALA));
+      this.npcSchatten = NPCS.map(() => this.add.image(0, 0, 'schatten').setScale(SPRITE_SKALA).setAlpha(FIGUR_DARSTELLUNG.schattenAlpha));
+      this.npcZ = NPCS.map((d) => {
+        const p = npcPosition(this.welt, d.id);
+        const b = gitterZuBild(p.x, p.y);
+        return neuerFigurZustand(b.x, b.y, 'ur');
+      });
+      // Namen in der Welt: laufen mit dem Zoom der Hauptkamera, Skala = Skala / Zoom (Bildschirmgroesse wie ohne Zoom)
+      this.npcNamen = NPCS.map((d) => new PixelText(this, 0, 0, d.name, { skala: weltTextSkala(NPC_SCHRIFT_PX), farbe: 0xffffff, rand: PALETTE.umriss, ox: 0.5, oy: 1 }));
+
+      // Der Chef: laeuft nach der Zeit um seinen Schreibtisch (chef.ts), Bild und Name wie die NPCs.
+      registriereChef(this.textures);
+      const cp = chefPosition(this.chef.t);
+      const cb = gitterZuBild(cp.x, cp.y);
+      this.chefZ = neuerFigurZustand(cb.x, cb.y, 'ur');
+      this.chefSchatten = this.add.image(cb.x, cb.y, 'schatten').setScale(SPRITE_SKALA).setAlpha(FIGUR_DARSTELLUNG.schattenAlpha);
+      this.chefBild = this.add.image(cb.x, cb.y, chefSchluessel('ur', 0, false)).setOrigin(0.5, 1).setScale(SPRITE_SKALA);
+      this.chefName = new PixelText(this, 0, 0, SZENEN_TEXTE.chefName, { skala: weltTextSkala(NPC_SCHRIFT_PX), farbe: 0xffffff, rand: PALETTE.umriss, ox: 0.5, oy: 1 });
     });
-    this.npcNamen = NPCS.map((d) => new PixelText(this, 0, 0, d.name, { skala: pixelSkala(NPC_SCHRIFT_PX), farbe: 0xffffff, rand: PALETTE.umriss, ox: 0.5, oy: 1 }));
 
-    // Der Chef: laeuft nach der Zeit um seinen Schreibtisch (chef.ts), Bild und Name wie die NPCs.
-    registriereChef(this.textures);
-    const cp = chefPosition(this.chef.t);
-    const cb = gitterZuBild(cp.x, cp.y);
-    this.chefZ = neuerFigurZustand(cb.x, cb.y, 'ur');
-    this.chefSchatten = this.add.image(cb.x, cb.y, 'schatten').setScale(SPRITE_SKALA).setAlpha(FIGUR_DARSTELLUNG.schattenAlpha);
-    this.chefBild = this.add.image(cb.x, cb.y, chefSchluessel('ur', 0, false)).setOrigin(0.5, 1).setScale(SPRITE_SKALA);
-    this.chefName = new PixelText(this, 0, 0, SZENEN_TEXTE.chefName, { skala: pixelSkala(NPC_SCHRIFT_PX), farbe: 0xffffff, rand: PALETTE.umriss, ox: 0.5, oy: 1 });
-
-    this.baueAnzeige(stufe);
-    this.baueDialogFenster();
-    this.baueInventarFenster();
+    this.inOberflaeche(() => {
+      this.baueAnzeige(stufe);
+      this.baueDialogFenster();
+      this.baueInventarFenster();
+    });
     this.zeichneFigur(0);
     this.zeichneNpcs(0);
     this.zeichneChef(0);
+
+    // Probelauf (nur mit ?probe=...): ein Objekt ausserhalb der Huellen wird absichtlich nicht zugeordnet, die Pruefung muss dann werfen.
+    const probe = new URLSearchParams(window.location.search).get('probe');
+    if (probe === 'zuordnung') this.add.rectangle(0, 0, 10, 10, 0xff00ff);
+    this.pruefeKameraZuordnung();
+    if (probe !== null) (window as unknown as { __probe: unknown }).__probe = { szene: this, haupt: this.weltKamera, ui: this.uiKamera };
+  }
+
+  // Objekte, die `bauen` anlegt, gehoeren zur Welt: die Oberflaechenkamera ignoriert sie (Mengenunterschied der Anzeigeliste).
+  private inWelt(bauen: () => void): void {
+    this.uiKamera.ignore(this.neueObjekte(bauen));
+  }
+
+  // Objekte, die `bauen` anlegt, gehoeren zur Oberflaeche: die Hauptkamera (mit Zoom) ignoriert sie.
+  private inOberflaeche(bauen: () => void): void {
+    this.weltKamera.ignore(this.neueObjekte(bauen));
+  }
+
+  private neueObjekte(bauen: () => void): Phaser.GameObjects.GameObject[] {
+    const vorher = new Set<Phaser.GameObjects.GameObject>(this.children.list);
+    bauen();
+    return this.children.list.filter((o) => !vorher.has(o));
+  }
+
+  // Jedes Objekt der Szene wird von genau einer der beiden Kameras ignoriert; sonst Fehler (laut, nicht still).
+  private pruefeKameraZuordnung(): void {
+    const fehler = pruefeZuordnung(
+      this.children.list.map((o) => o.cameraFilter),
+      this.weltKamera.id,
+      this.uiKamera.id,
+    );
+    if (fehler.length > 0) throw new Error(`Kamerazuordnung fehlerhaft: ${fehler.join('; ')}`);
   }
 
   update(_zeit: number, delta: number): void {
@@ -523,7 +557,7 @@ export class SpielScene extends Phaser.Scene {
     this.dialogKosten = new PixelText(this, r.kosten.x + 26, r.kosten.y, '', { skala: pixelSkala(DIALOG_KOSTEN_SCHRIFT_PX), farbe: FENSTER_STIL.kosten })
       .setScrollFactor(0)
       .setDepth(tiefe + 1);
-    this.kostenSymbol = this.add.image(r.kosten.x, r.kosten.y, 'stoppuhr-klein').setOrigin(0, 0).setScale(SPRITE_SKALA).setScrollFactor(0).setDepth(tiefe + 1);
+    this.kostenSymbol = this.add.image(r.kosten.x, r.kosten.y, 'stoppuhr-klein').setOrigin(0, 0).setScale(UI_SKALA).setScrollFactor(0).setDepth(tiefe + 1);
     this.dialogObjekte.push(this.dialogRahmen, this.dialogName, this.dialogText, this.dialogKosten, this.kostenSymbol);
     r.knoepfe.forEach((kr, i) => {
       const knopf = knopfBauen(this, kr.x, kr.y, kr.breite, kr.hoehe, 'antwort', '', pixelSkala(DIALOG_ANTWORT_SCHRIFT_PX), tiefe + 1, () => this.waehleAntwort(i), DIALOG_ANTWORT_EINZUG);
@@ -546,9 +580,10 @@ export class SpielScene extends Phaser.Scene {
       const bild = gitterZuBild(p.x, p.y);
       this.npcZ[i] = figurZustand(this.npcZ[i], bild.x, bild.y, deltaMs, NPC_SCHRITTE);
       const z = this.npcZ[i];
-      this.npcBilder[i].setTexture(npcSchluessel(d.id, z.richtung, z.schritt, z.bewegt)).setPosition(bild.x, bild.y).setDepth(p.x + p.y);
-      this.npcSchatten[i].setPosition(bild.x, bild.y).setDepth(p.x + p.y - 0.01);
-      this.npcNamen[i].setPosition(bild.x, bild.y - FIGUR_DARSTELLUNG.nameHoehe).setDepth(p.x + p.y);
+      const a = anzeigePunkt(bild.x, bild.y);
+      this.npcBilder[i].setTexture(npcSchluessel(d.id, z.richtung, z.schritt, z.bewegt)).setPosition(a.x, a.y).setDepth(p.x + p.y);
+      this.npcSchatten[i].setPosition(a.x, a.y).setDepth(p.x + p.y - 0.01);
+      this.npcNamen[i].setPosition(a.x, a.y - FIGUR_DARSTELLUNG.nameHoehe).setDepth(p.x + p.y);
     });
   }
 
@@ -558,9 +593,10 @@ export class SpielScene extends Phaser.Scene {
     const bild = gitterZuBild(p.x, p.y);
     this.chefZ = figurZustand(this.chefZ, bild.x, bild.y, deltaMs, CHEF_SCHRITTE);
     const z = this.chefZ;
-    this.chefBild.setTexture(chefSchluessel(z.richtung, z.schritt, z.bewegt)).setPosition(bild.x, bild.y).setDepth(p.x + p.y);
-    this.chefSchatten.setPosition(bild.x, bild.y).setDepth(p.x + p.y - 0.01);
-    this.chefName.setPosition(bild.x, bild.y - FIGUR_DARSTELLUNG.nameHoehe).setDepth(p.x + p.y);
+    const a = anzeigePunkt(bild.x, bild.y);
+    this.chefBild.setTexture(chefSchluessel(z.richtung, z.schritt, z.bewegt)).setPosition(a.x, a.y).setDepth(p.x + p.y);
+    this.chefSchatten.setPosition(a.x, a.y).setDepth(p.x + p.y - 0.01);
+    this.chefName.setPosition(a.x, a.y - FIGUR_DARSTELLUNG.nameHoehe).setDepth(p.x + p.y);
   }
 
   // Spieler und NPCs zeigen das Stehbild (Gespraech, Inventar, Ende), die Blickrichtung bleibt.
@@ -590,6 +626,11 @@ export class SpielScene extends Phaser.Scene {
   // Abdunkeln, Meldung und zwei Knoepfe. Wird genau einmal je Spiel aufgerufen (danach laeuft update nicht mehr).
   // Abdunkeln, Meldung und zwei Knoepfe. Wird genau einmal je Spiel aufgerufen (danach laeuft update nicht mehr).
   private zeigeMeldung(): void {
+    this.inOberflaeche(() => this.baueMeldung());
+    this.pruefeKameraZuordnung();
+  }
+
+  private baueMeldung(): void {
     this.figurSteht();
     this.setzeHinweis('keiner');
     this.speichere(); // Ende des Laufs: Infos und Gegenstaende in den Speicher
@@ -655,7 +696,7 @@ export class SpielScene extends Phaser.Scene {
     this.inventarGegenText = new PixelText(this, r.gegenstaende.x + 26, r.gegenstaende.y, '', { skala: sText, farbe: FENSTER_STIL.kosten, umbruch: r.gegenstaende.breite - 26 })
       .setScrollFactor(0)
       .setDepth(tiefe + 1);
-    const blatt = this.add.image(r.gegenstaende.x, r.gegenstaende.y + 2, 'blatt-symbol').setOrigin(0, 0).setScale(SPRITE_SKALA).setScrollFactor(0).setDepth(tiefe + 1);
+    const blatt = this.add.image(r.gegenstaende.x, r.gegenstaende.y + 2, 'blatt-symbol').setOrigin(0, 0).setScale(UI_SKALA).setScrollFactor(0).setDepth(tiefe + 1);
     this.inventarAnzeige = new PixelText(this, mitte(r.anzeige).x, mitte(r.anzeige).y, '', { skala: sText, farbe: FENSTER_STIL.text, ox: 0.5, oy: 0.5 })
       .setScrollFactor(0)
       .setDepth(tiefe + 1);
@@ -695,7 +736,7 @@ export class SpielScene extends Phaser.Scene {
       if (o.art === 'maschine') {
         // Kaffeemaschine: Beschriftung in Pixelschrift.
         const deckel = gitterZuBild(o.x + 0.5, o.y + 0.5);
-        new PixelText(this, deckel.x, deckel.y - MASCHINE_HOEHE, SZENEN_TEXTE.kaffee, { skala: pixelSkala(MASCHINE_SCHRIFT_PX), farbe: 0xffffff, rand: PALETTE.umriss, ox: 0.5, oy: 0.5 }).setDepth(o.x + o.y + 2);
+        new PixelText(this, deckel.x, deckel.y - MASCHINE_HOEHE, SZENEN_TEXTE.kaffee, { skala: weltTextSkala(MASCHINE_SCHRIFT_PX), farbe: 0xffffff, rand: PALETTE.umriss, ox: 0.5, oy: 0.5 }).setDepth(o.x + o.y + 2);
       }
     }
   }
@@ -705,9 +746,10 @@ export class SpielScene extends Phaser.Scene {
     const bild = gitterZuBild(this.pos.x, this.pos.y);
     this.figZ = figurZustand(this.figZ, bild.x, bild.y, deltaMs, SPIELER_SCHRITTE);
     const z = this.figZ;
-    this.figurBild.setTexture(figurSchluessel(z.richtung, z.schritt, z.bewegt)).setPosition(bild.x, bild.y).setDepth(this.pos.x + this.pos.y);
-    this.figurSchatten.setPosition(bild.x, bild.y).setDepth(this.pos.x + this.pos.y - 0.01);
-    this.folgeZiel.setPosition(bild.x, bild.y - FIGUR_DARSTELLUNG.kameraHoehe);
+    const a = anzeigePunkt(bild.x, bild.y);
+    this.figurBild.setTexture(figurSchluessel(z.richtung, z.schritt, z.bewegt)).setPosition(a.x, a.y).setDepth(this.pos.x + this.pos.y);
+    this.figurSchatten.setPosition(a.x, a.y).setDepth(this.pos.x + this.pos.y - 0.01);
+    this.folgeZiel.setPosition(a.x, a.y - FIGUR_DARSTELLUNG.kameraHoehe);
   }
 
   private baueAnzeige(stufe: Stufe): void {
@@ -731,7 +773,7 @@ export class SpielScene extends Phaser.Scene {
     const px = (w - pb) / 2;
     const py = HUD_LAYOUT.timerY;
     zeichneRechtecke(this.add.graphics().setScrollFactor(0).setDepth(HUD_TIEFE), plaketteRechtecke(px, py, pb, ph));
-    this.add.image(px + 12, py + ph / 2, 'stoppuhr').setOrigin(0, 0.5).setScale(SPRITE_SKALA).setScrollFactor(0).setDepth(HUD_TIEFE + 1);
+    this.add.image(px + 12, py + ph / 2, 'stoppuhr').setOrigin(0, 0.5).setScale(UI_SKALA).setScrollFactor(0).setDepth(HUD_TIEFE + 1);
     this.plaketteText = '';
     this.plaketteSchluessel = null;
     this.plaketteBild = this.add.image(px + 52, py + ph / 2, '__DEFAULT').setOrigin(0, 0.5).setScale(4).setScrollFactor(0).setDepth(HUD_TIEFE + 1);
@@ -769,7 +811,7 @@ export class SpielScene extends Phaser.Scene {
 
     // Kaffee im HUD (nur sichtbar, solange er getragen wird) und die kurze Meldung beim Verschütten.
     const kh = KAFFEE_HUD;
-    this.kaffeeSymbol = this.add.image(kh.symbolX, kh.symbolY, 'tasse').setOrigin(0, 0).setScale(SPRITE_SKALA).setScrollFactor(0).setDepth(HUD_TIEFE).setVisible(this.kaffee);
+    this.kaffeeSymbol = this.add.image(kh.symbolX, kh.symbolY, 'tasse').setOrigin(0, 0).setScale(UI_SKALA).setScrollFactor(0).setDepth(HUD_TIEFE).setVisible(this.kaffee);
     this.kaffeeText = new PixelText(this, kh.textX, kh.textY, SZENEN_TEXTE.kaffee, { skala: pixelSkala(kh.schriftPx), farbe: 0xffffff, rand })
       .setScrollFactor(0)
       .setDepth(HUD_TIEFE)

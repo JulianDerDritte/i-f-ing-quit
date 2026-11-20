@@ -135,8 +135,12 @@ export const FIGUR_DARSTELLUNG = {
 };
 export const KAMERA_LERP = 1; // Kamera folgt ohne Verzoegerung
 export const BODEN_TIEFE = -1; // Bodenflaeche liegt hinter allem
-// A-009 Teil a: Pixel-Grafik. Ein Rasterpunkt der Sprites = SPRITE_SKALA Bildschirmpunkte.
-export const SPRITE_SKALA = 2;
+// A-009 Teil a: Pixel-Grafik. Ein Rasterpunkt der Welt-Sprites = SPRITE_SKALA Weltpunkte (A-012: Skala 1, die Kamera zoomt).
+export const SPRITE_SKALA = 1;
+// A-012: Oberflaeche (Menuehintergrund, Stoppuhr, Tasse, Blatt-Symbol) bleibt im Raster 2 : 1, ein Rasterpunkt = 2 Bildschirmpunkte.
+export const UI_SKALA = 2;
+// A-012: Kamerazoom der Spielwelt (ganzzahlig, damit jeder Rasterpunkt genau 2 x 2 Bildschirmpunkte belegt); die Oberflaeche hat eine eigene Kamera ohne Zoom.
+export const KAMERA_ZOOM = 2;
 export const LAUF_TAKT_MS = 110; // Dauer eines Laufbildes, solange sich die Figur bewegt
 export const SPRITE_KONSTANTEN = { skala: SPRITE_SKALA, laufTakt: LAUF_TAKT_MS };
 export const RAHMEN = { staerke: 2, farbe: 0xffffff };
@@ -364,6 +368,30 @@ export const PALETTE = {
   startWeiss: 0xf6f6ff,
   schildGrau: 0xb4b4c4,
   schatten: 0x1a1a2e,
+  // A-012: dritte Toene je Material des Spielers und feinere Welt (Licht, Schatten, Gebrauchsspuren)
+  haarBraunSchatten: 0x5a2e10,
+  hautLicht: 0xffd2a4,
+  hoseSchatten: 0x1c1a38,
+  hemdLicht: 0xffffff,
+  mund: 0xa8442c,
+  krawatteLicht: 0xff5a5a,
+  krawatteDunkel: 0x9a0c10,
+  schuhLicht: 0x8c5430,
+  schuhSohle: 0x24140a,
+  tastatur: 0x3a3e58,
+  tastaturLicht: 0x7a7ea0,
+  topfLicht: 0xe88a4c,
+  fliesenHellSchatten: 0x5a68b0,
+  fliesenDunkelSchatten: 0x46549a,
+  parkettHellSchatten: 0x86582a,
+  parkettDunkelSchatten: 0x70461f,
+  parkettMaser: 0x8a5a2a,
+  fliesenKratzer: 0xc4ceff,
+  fliesenFleck: 0x5864b4,
+  teppichBorte: 0xc8982c,
+  fensterTief: 0x6ab4d8,
+  schildLicht: 0xdcdcea,
+  mauerLicht: 0x7a86e8,
 } as const;
 
 // Dekor und Wege der Pixel-Welt (nur Anzeige, keine Kollision; Karte und Spielregeln unveraendert).
