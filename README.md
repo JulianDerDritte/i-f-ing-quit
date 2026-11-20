@@ -23,6 +23,16 @@ Nach der Wahl der Schwierigkeit im Startmenue laeuft die Figur durch Vorzimmer, 
 - Oben in der Bildmitte laeuft der Timer (m:ss, aufgerundet, rot ab der Warnzeit). Er startet mit der Spielszene.
 - Sieg: im Chefbuero nahe der goldenen Ablagezelle mit `E` oder der Leertaste die Kuendigung ablegen (ein Hinweis erscheint in Reichweite). Niederlage: der Timer erreicht null. Beide Male friert das Spiel ein; "Nochmal" bzw. "Neustart" startet dieselbe Stufe neu, "Zum Menue" fuehrt ins Startmenue.
 
+## NPCs und Gespraeche
+
+- Im Gebaeude patrouillieren NPCs (Rollen wie Empfang oder Buchhaltung) auf festen Routen: vom ersten Wegpunkt zum letzten und zurueck, endlos. Sie laufen nur, solange das Spiel laeuft; im Gespraech, nach Sieg und nach Niederlage stehen sie.
+- Kommt die Figur einem NPC naeher als die Kontaktreichweite, beginnt ein Gespraech. Jeder NPC spricht je Spiel hoechstens einmal, es gibt keine Kollision mit der Figur: Ausweichen spart Zeit.
+- Das Gespraech kostet Zeit, die beim Oeffnen sofort vom Timer abgezogen wird (je NPC ein Wert aus der Konfiguration). Waehrend das Dialogfenster offen ist, steht der Timer, und Figur und NPCs stehen. Reicht die Zeit nach dem Abzug nicht mehr, ist das Spiel verloren, und es erscheint kein Fenster.
+- Das Dialogfenster am unteren Bildrand zeigt Rolle, Text, die Kostenzeile und klickbare Antworten. Jede Antwort fuehrt zu einem Folgetext oder beendet das Gespraech. Antworten koennen eine Information (`info`) tragen; sie wird nur gemerkt und noch nicht angezeigt (das Inventar folgt spaeter).
+- In jedem Gespraech gibt es einen Knopf "Nachfragen" mit eigenen Zeitkosten (im Knopf angezeigt, Werte in der Konfiguration). Er zieht die Kosten sofort ab und bringt eine Zusatzinformation; je Gespraech ist er nur einmal waehlbar. Jedes Gespraech laesst sich auch ganz ohne Nachfrage beenden (dann nur die Kurzinfo). Reicht die Zeit fuer eine Nachfrage nicht, ist das Spiel verloren.
+- Neustart, "Nochmal" und der Weg ueber das Menue legen alles frisch an: NPCs am Start, keiner gesprochen, kein Fenster, Timer voll.
+- Die kurzen Timer je Stufe, die Gespraechskosten, Tempo, Radien und Fensterwerte stehen in `src/config.ts`.
+
 ## Probeparameter
 
 Die Adresse mit `?zeit=<Sekunden>` (zum Beispiel `?zeit=20`) ersetzt fuer diesen Start die Startzeit der gewaehlten Stufe, damit Sieg und Niederlage ohne langes Warten probiert werden koennen. Ohne Parameter oder bei ungueltigem oder nicht positivem Wert gilt die Konfiguration. Nur ein Probehilfsmittel, spaeter entfernbar.
@@ -33,7 +43,9 @@ Die Adresse mit `?zeit=<Sekunden>` (zum Beispiel `?zeit=20`) ersetzt fuer diesen
 - `src/karte.ts` - Karte als Textraster, Bereiche und Tueren
 - `src/projektion.ts` - isometrische Projektion (Gitter zu Bild und zurueck)
 - `src/bewegung.ts` - Bewegung und Kollision (Kreis gegen Zellen)
-- `src/spielzustand.ts` - Spielphase, Restzeit, Ablegen, Zeitformat, Probeparameter
+- `src/spielzustand.ts` - Spielphase (laeuft, Gespraech, Sieg, Niederlage), Restzeit, Zeitabzug fuer Gespraeche, Ablegen, Zeitformat, Probeparameter
+- `src/npcs.ts` - NPC-Daten (Rollen, Startzellen, Routen), Patrouille, Kontakt, Vermerk "gesprochen"
+- `src/dialog.ts` - Dialogbaeume mit Texten, Gespraechsablauf, Rechtecke des Dialogfensters
 - `src/SpielScene.ts`, `src/MenueScene.ts` - Szenen
 
-`karte.ts`, `projektion.ts`, `bewegung.ts` und `spielzustand.ts` importieren kein Phaser und enthalten nur reine Logik; Importe tragen die Endung `.ts`, damit Node sie direkt laden kann.
+`karte.ts`, `projektion.ts`, `bewegung.ts`, `spielzustand.ts`, `npcs.ts` und `dialog.ts` importieren kein Phaser und enthalten nur reine Logik; Importe tragen die Endung `.ts`, damit Node sie direkt laden kann.

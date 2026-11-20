@@ -2,6 +2,17 @@ import Phaser from 'phaser';
 import {
   ABLAGE_FARBE,
   BODENFARBEN,
+  DIALOG_ANTWORT_SCHRIFT_PX,
+  DIALOG_FENSTER_FARBE,
+  DIALOG_KNOPF_FARBE,
+  DIALOG_KNOPF_HOVER_FARBE,
+  DIALOG_KOSTEN_FARBE,
+  DIALOG_KOSTEN_SCHRIFT_PX,
+  DIALOG_NAME_FARBE,
+  DIALOG_NAME_SCHRIFT_PX,
+  DIALOG_RAHMEN_FARBE,
+  DIALOG_TEXT_SCHRIFT_PX,
+  DIALOG_TIEFE,
   FIGUR_FARBE,
   FIGUR_RADIUS,
   HINWEIS_SCHRIFT_PX,
@@ -14,6 +25,10 @@ import {
   MELDUNG_KNOPF_SCHRIFT_PX,
   MELDUNG_SCHRIFT_PX,
   MELDUNG_ZEIT_SCHRIFT_PX,
+  NPC_DIALOG_KOSTEN,
+  NPC_FARBEN,
+  NPC_RADIUS,
+  NPC_SCHRIFT_PX,
   OVERLAY_ABDUNKLUNG,
   START_FARBE,
   STUFEN_NAMEN,
@@ -22,11 +37,15 @@ import {
   TISCH_HOEHE,
   WAND_FARBE,
   WAND_HOEHE,
+  zeitText,
 } from './config.ts';
-import type { Stufe } from './config.ts';
+import type { NpcId, Stufe } from './config.ts';
 import {
+  abziehen,
   ablegen,
+  dialogBeenden,
   fortschreiben,
+  nachfrageAbziehen,
   istWarnung,
   nahAnAblage,
   neuerZustand,
@@ -34,6 +53,20 @@ import {
   zeitAufgerundet,
 } from './spielzustand.ts';
 import type { Spielzustand } from './spielzustand.ts';
+import { NPCS, kontaktNpc, markiereGesprochen, neueWelt, npcPosition, npcsFortschreiben } from './npcs.ts';
+import type { NpcWelt } from './npcs.ts';
+import {
+  aktuellerKnoten,
+  angeboteneAntworten,
+  antworte,
+  antwortBeschriftung,
+  dialogRechtecke,
+  istBeendet,
+  kostenZeile,
+  nachfrageKosten,
+  starteGespraech,
+} from './dialog.ts';
+import type { DialogZustand } from './dialog.ts';
 import { auswahl } from './auswahl.ts';
 import { schritt } from './bewegung.ts';
 import type { Eingabe, Position } from './bewegung.ts';
@@ -64,6 +97,17 @@ export class SpielScene extends Phaser.Scene {
   private ablegeTasten!: Phaser.Input.Keyboard.Key[];
   private zustand!: Spielzustand;
   private startSekunden = 0;
+  private welt!: NpcWelt;
+  private npcGrafiken: Phaser.GameObjects.Graphics[] = [];
+  private npcNamen: Phaser.GameObjects.Text[] = [];
+  private dialog: DialogZustand | null = null;
+  private dialogObjekte: (Phaser.GameObjects.Rectangle | Phaser.GameObjects.Text)[] = []; // alle Teile des Dialogfensters (nur ein-/ausgeblendet)
+  private dialogName!: Phaser.GameObjects.Text;
+  private dialogText!: Phaser.GameObjects.Text;
+  private dialogKosten!: Phaser.GameObjects.Text;
+  private antwortFelder: Phaser.GameObjects.Rectangle[] = [];
+  private antwortTexte: Phaser.GameObjects.Text[] = [];
+  private infos: string[] = []; // aus Gespraechen; Anzeige und Inventar folgen in Stufe 6
 
   constructor() {
     super('Spiel');
@@ -110,12 +154,25 @@ export class SpielScene extends Phaser.Scene {
     this.zustand = neuerZustand(this.startSekunden);
     this.hinweisSichtbar = false;
 
+    // NPCs und Gespraeche: alles frisch (Start, keiner gesprochen, kein Fenster).
+    this.welt = neueWelt();
+    this.dialog = null;
+    this.infos = [];
+    this.npcGrafiken = NPCS.map(() => this.add.graphics());
+    this.npcNamen = NPCS.map((d) =>
+      this.add
+        .text(0, 0, d.name, { fontSize: `${NPC_SCHRIFT_PX}px`, color: '#ffffff', stroke: '#000000', strokeThickness: 3 })
+        .setOrigin(0.5, 1),
+    );
+
     this.baueAnzeige(stufe);
+    this.baueDialogFenster();
     this.zeichneFigur();
+    this.zeichneNpcs();
   }
 
   update(_zeit: number, delta: number): void {
-    if (this.zustand.phase !== 'laeuft') return; // Sieg oder Niederlage: alles steht.
+    if (this.zustand.phase !== 'laeuft') return; // Gespraech, Sieg oder Niederlage: alles steht.
 
     // Der Timer laeuft mit der echten Bildzeit, die Bewegung mit der gekuerzten.
     this.zustand = fortschreiben(this.zustand, delta / 1000);
@@ -134,8 +191,10 @@ export class SpielScene extends Phaser.Scene {
       runter: t.S.isDown || t.DOWN.isDown,
     };
     this.pos = schritt(KARTE, this.pos, eingabe, dt);
+    this.welt = npcsFortschreiben(this.welt, dt, this.zustand.phase);
+    this.zeichneNpcs();
 
-    const b = bereichAnZelle(KARTE, Math.floor(this.pos.x), Math.floor(this.pos.y));
+    const b =bereichAnZelle(KARTE, Math.floor(this.pos.x), Math.floor(this.pos.y));
     if (b !== null && b !== this.bereich) {
       this.bereich = b;
       this.raumText.setText(`Raum: ${BEREICH_ANZEIGE[b]}`);
@@ -149,8 +208,181 @@ export class SpielScene extends Phaser.Scene {
     }
     if (this.ablegeTasten.some((k) => Phaser.Input.Keyboard.JustDown(k))) {
       this.zustand = ablegen(this.zustand, KARTE, this.pos.x, this.pos.y);
-      if (this.zustand.phase === 'sieg') this.zeigeMeldung();
+      if (this.zustand.phase === 'sieg') {
+        this.zeigeMeldung();
+        return;
+      }
     }
+
+    const kontakt = kontaktNpc(this.welt, this.pos.x, this.pos.y, this.zustand.phase);
+    if (kontakt !== null) this.oeffneDialog(kontakt);
+  }
+
+  // Kontakt: Kosten sofort abziehen; reicht die Zeit nicht mehr, ist das Spiel verloren (kein Fenster).
+  private oeffneDialog(id: NpcId): void {
+    const def = NPCS.find((d) => d.id === id);
+    if (def === undefined) throw new Error(`NPC ${id} unbekannt`);
+    markiereGesprochen(this.welt, id);
+    this.zustand = abziehen(this.zustand, NPC_DIALOG_KOSTEN[id]);
+    this.hinweisSichtbar = false;
+    this.hinweisText.setVisible(false);
+    this.zeigeTimer();
+    if (this.zustand.phase === 'niederlage') {
+      this.zeigeMeldung();
+      return;
+    }
+    this.dialog = starteGespraech(def.dialogId);
+    this.dialogName.setText(def.name);
+    this.dialogKosten.setText(kostenZeile(zeitText(NPC_DIALOG_KOSTEN[id])));
+    this.dialogObjekte.forEach((o) => o.setVisible(true));
+    this.zeigeKnoten();
+  }
+
+  // Zeigt Text und Antworten des aktuellen Knotens; nicht benoetigte Antwortfelder sind aus und nicht klickbar.
+  private zeigeKnoten(): void {
+    if (this.dialog === null) return;
+    const k = aktuellerKnoten(this.dialog);
+    if (k === null) return;
+    const angeboten = angeboteneAntworten(this.dialog);
+    const r = dialogRechtecke(angeboten.length);
+    this.dialogText.setText(k.text);
+    for (let i = 0; i < this.antwortFelder.length; i++) {
+      const feld = this.antwortFelder[i];
+      const text = this.antwortTexte[i];
+      const an = i < angeboten.length;
+      feld.setVisible(an);
+      text.setVisible(an);
+      if (feld.input) feld.input.enabled = an;
+      if (an) {
+        const kr = r.knoepfe[i];
+        feld.setPosition(kr.x + kr.breite / 2, kr.y + kr.hoehe / 2);
+        text.setPosition(kr.x + 12, kr.y + kr.hoehe / 2);
+        text.setText(antwortBeschriftung(this.dialog, angeboten[i].antwort));
+      }
+    }
+  }
+
+  // Slot = Platz des Knopfs im Fenster; der echte Antwortindex kommt aus den angebotenen Antworten.
+  private waehleAntwort(slot: number): void {
+    if (this.dialog === null || this.zustand.phase !== 'dialog') return;
+    const gewaehlt = angeboteneAntworten(this.dialog)[slot];
+    if (gewaehlt === undefined) return;
+    const kosten = nachfrageKosten(this.dialog, gewaehlt.index);
+    const neu = antworte(this.dialog, gewaehlt.index);
+    if (neu === this.dialog) return;
+    this.dialog = neu;
+    if (kosten !== null) {
+      // Nachfrage: Kosten sofort abziehen; reicht die Zeit nicht, ist das Spiel verloren (Meldung statt Fenster).
+      this.zustand = nachfrageAbziehen(this.zustand, kosten);
+      this.zeigeTimer();
+      if (this.zustand.phase === 'niederlage') {
+        this.infos.push(...neu.infos);
+        this.dialog = null;
+        this.dialogObjekte.forEach((o) => o.setVisible(false));
+        this.antwortFelder.forEach((f) => {
+          if (f.input) f.input.enabled = false;
+        });
+        this.zeigeMeldung();
+        return;
+      }
+    }
+    if (istBeendet(this.dialog)) this.schliesseDialog();
+    else this.zeigeKnoten();
+  }
+
+  // Gespraechsende: Fenster aus, Timer laeuft weiter; Bewegung liest wieder den echten Tastenzustand.
+  private schliesseDialog(): void {
+    if (this.dialog !== null) this.infos.push(...this.dialog.infos);
+    this.dialog = null;
+    this.dialogObjekte.forEach((o) => o.setVisible(false));
+    this.antwortFelder.forEach((f) => {
+      if (f.input) f.input.enabled = false;
+    });
+    this.zustand = dialogBeenden(this.zustand);
+    // Eine waehrend des Gespraechs gedrueckte E-/Leertaste soll nicht nachtraeglich ablegen.
+    this.ablegeTasten.forEach((k) => Phaser.Input.Keyboard.JustDown(k));
+  }
+
+  private baueDialogFenster(): void {
+    const r = dialogRechtecke(3);
+    const f = r.fenster;
+    this.dialogObjekte = [];
+    this.antwortFelder = [];
+    this.antwortTexte = [];
+    const tiefe = DIALOG_TIEFE;
+    const mitte = (q: { x: number; y: number; breite: number; hoehe: number }) => ({
+      x: q.x + q.breite / 2,
+      y: q.y + q.hoehe / 2,
+    });
+    const fm = mitte(f);
+    this.dialogObjekte.push(
+      this.add
+        .rectangle(fm.x, fm.y, f.breite, f.hoehe, DIALOG_FENSTER_FARBE)
+        .setStrokeStyle(2, DIALOG_RAHMEN_FARBE)
+        .setScrollFactor(0)
+        .setDepth(tiefe),
+    );
+    this.dialogName = this.add
+      .text(r.name.x, r.name.y, '', { fontSize: `${DIALOG_NAME_SCHRIFT_PX}px`, color: DIALOG_NAME_FARBE, fontStyle: 'bold' })
+      .setScrollFactor(0)
+      .setDepth(tiefe + 1);
+    this.dialogText = this.add
+      .text(r.text.x, r.text.y, '', {
+        fontSize: `${DIALOG_TEXT_SCHRIFT_PX}px`,
+        color: '#ffffff',
+        wordWrap: { width: r.text.breite },
+      })
+      .setScrollFactor(0)
+      .setDepth(tiefe + 1);
+    this.dialogKosten = this.add
+      .text(r.kosten.x, r.kosten.y, '', { fontSize: `${DIALOG_KOSTEN_SCHRIFT_PX}px`, color: DIALOG_KOSTEN_FARBE })
+      .setScrollFactor(0)
+      .setDepth(tiefe + 1);
+    this.dialogObjekte.push(this.dialogName, this.dialogText, this.dialogKosten);
+    r.knoepfe.forEach((kr, i) => {
+      const m = mitte(kr);
+      const feld = this.add
+        .rectangle(m.x, m.y, kr.breite, kr.hoehe, DIALOG_KNOPF_FARBE)
+        .setStrokeStyle(2, DIALOG_RAHMEN_FARBE)
+        .setScrollFactor(0)
+        .setDepth(tiefe + 1)
+        .setInteractive({ useHandCursor: true });
+      const text = this.add
+        .text(kr.x + 12, m.y, '', { fontSize: `${DIALOG_ANTWORT_SCHRIFT_PX}px`, color: '#ffffff' })
+        .setOrigin(0, 0.5)
+        .setScrollFactor(0)
+        .setDepth(tiefe + 2);
+      feld.on('pointerover', () => feld.setFillStyle(DIALOG_KNOPF_HOVER_FARBE));
+      feld.on('pointerout', () => feld.setFillStyle(DIALOG_KNOPF_FARBE));
+      feld.on('pointerdown', () => this.waehleAntwort(i));
+      this.antwortFelder.push(feld);
+      this.antwortTexte.push(text);
+      this.dialogObjekte.push(feld, text);
+    });
+    // Anfangs aus: unsichtbar und nicht klickbar.
+    this.dialogObjekte.forEach((o) => o.setVisible(false));
+    this.antwortFelder.forEach((fe) => {
+      if (fe.input) fe.input.enabled = false;
+    });
+  }
+
+  private zeichneNpcs(): void {
+    NPCS.forEach((d, i) => {
+      const p = npcPosition(this.welt, d.id);
+      const bild = gitterZuBild(p.x, p.y);
+      const g = this.npcGrafiken[i];
+      g.clear();
+      g.setDepth(p.x + p.y);
+      const rx = NPC_RADIUS * Math.SQRT2 * KACHEL_BREITE;
+      const ry = NPC_RADIUS * Math.SQRT2 * KACHEL_HOEHE;
+      g.fillStyle(0x000000, 0.35);
+      g.fillEllipse(bild.x, bild.y, rx, ry);
+      g.fillStyle(NPC_FARBEN[d.id], 1);
+      g.fillRect(bild.x - 8, bild.y - 30, 16, 30);
+      g.fillStyle(tonen(NPC_FARBEN[d.id], 1.2), 1);
+      g.fillCircle(bild.x, bild.y - 36, 8);
+      this.npcNamen[i].setPosition(bild.x, bild.y - 46).setDepth(p.x + p.y);
+    });
   }
 
   private zeigeTimer(): void {
