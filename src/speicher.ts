@@ -1,7 +1,7 @@
 // Persistenz der Infos (ohne Phaser): localStorage als austauschbarer Speicher.
 // Fehlt der Speicher, ist sein Inhalt ungueltig oder wirft er, laeuft das Spiel ohne Meldung mit leerem Inventar
 // weiter (Vorgabe K7); Schreiben und Loeschen melden nur zurueck, ob es geklappt hat.
-import { infoEintragen, istNpcId, neuesInventar } from './inventar.ts';
+import { infoEintragen, istInfoQuelle, neuesInventar } from './inventar.ts';
 import type { InfoEintrag, Inventar } from './inventar.ts';
 
 export const SPEICHER_SCHLUESSEL = 'ifingquit.inventar.v1';
@@ -25,7 +25,7 @@ export function holeSpeicher(): SpeicherQuelle | null {
 function istEintrag(e: unknown): e is InfoEintrag {
   if (typeof e !== 'object' || e === null) return false;
   const o = e as Record<string, unknown>;
-  return istNpcId(o.npc) && typeof o.text === 'string' && o.text !== '' && typeof o.nachfrage === 'boolean' && typeof o.kaffee === 'boolean';
+  return istInfoQuelle(o.npc) && typeof o.text === 'string' && o.text !== '' && typeof o.nachfrage === 'boolean' && typeof o.kaffee === 'boolean';
 }
 
 // Gespeicherte Infos; bei jedem Problem (kein Speicher, kein JSON, andere Version, falsche Form, Wurf): leer.

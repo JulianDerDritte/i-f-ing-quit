@@ -235,3 +235,27 @@ export function schattenBild(): Raster {
     rasterAusZeilen(['....SSSSSS....', '..SSSSSSSSSS..', '.SSSSSSSSSSSS.', '.SSSSSSSSSSSS.', '..SSSSSSSSSS..', '....SSSSSS....'], { S: PALETTE.schatten }),
   );
 }
+
+// ---------------------------------------------------------------- beweglicher Chef (A-010)
+export const CHEF_SCHRITTE = 2;
+
+function chefGrundbild(hinten: boolean, beine: string[]): Raster {
+  const zeilen = CHEF_ZEILEN.slice(0, 12).concat(beine).map((z) => z.split(''));
+  if (hinten) {
+    for (let y = 3; y <= 6; y++) for (let x = 0; x < zeilen[y].length; x++) if ('SsEQM'.includes(zeilen[y][x])) zeilen[y][x] = 'H';
+    for (let y = 7; y <= 8; y++) for (let x = 0; x < zeilen[y].length; x++) if (zeilen[y][x] === 'R') zeilen[y][x] = 'N';
+  } else {
+    zeilen[5] = '.HSESSESSSSSH.'.split(''); // Blick nach links
+  }
+  const farben = { ...farbenFuer({ ...SPIELER, haarFarbe: PALETTE.haarSchwarz, haarLicht: PALETTE.haarSchwarzLicht, hose: PALETTE.anzug, schuh: PALETTE.schuhSchwarz }), W: PALETTE.hemd };
+  return mitUmriss(rasterAusZeilen(zeilen.map((z) => z.join('')), farben), PALETTE.umriss);
+}
+
+// Chef in vier Blickrichtungen: Stehbild oder eines von zwei Laufbildern (rechts = Spiegelbild von links)
+export function chefFigurBild(richtung: Richtung, schritt: number, bewegt: boolean): Raster {
+  if (!Number.isInteger(schritt) || schritt < 0 || schritt >= CHEF_SCHRITTE) throw new Error(`Chef-Schritt ${schritt} ausserhalb 0..${CHEF_SCHRITTE - 1}`);
+  const beine = bewegt ? BEINE_LAUF[schritt * 2] : BEINE_STEHEN;
+  const hinten = richtung[0] === 'o';
+  const links = gemerkt(`chef-${hinten ? 'o' : 'u'}l-${beine.join('')}`, () => chefGrundbild(hinten, beine));
+  return richtung[1] === 'l' ? links : gemerkt(`chef-${hinten ? 'o' : 'u'}r-${beine.join('')}`, () => spiegeln(links));
+}

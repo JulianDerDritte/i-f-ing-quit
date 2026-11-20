@@ -3,7 +3,7 @@
 import Phaser from 'phaser';
 import { KARTE } from '../karte.ts';
 import { NPC_IDS } from '../config.ts';
-import { NPC_SCHRITTE, RICHTUNGEN, SPIELER_SCHRITTE, chefBild, figurBild, npcBild, schattenBild } from './figuren.ts';
+import { CHEF_SCHRITTE, NPC_SCHRITTE, RICHTUNGEN, SPIELER_SCHRITTE, chefBild, chefFigurBild, figurBild, npcBild, schattenBild } from './figuren.ts';
 import { bodenRaster, weltObjekte } from './welt.ts';
 import { rasterAlsRgba } from './raster.ts';
 import { blattSymbolRaster, menueHintergrund, stoppuhrRaster, tasseRaster } from './ui.ts';
@@ -61,4 +61,16 @@ export function registriereUi(textures: Phaser.Textures.TextureManager): void {
   rasterAlsTextur(textures, 'stoppuhr-klein', stoppuhrRaster(false));
   rasterAlsTextur(textures, 'tasse', tasseRaster());
   rasterAlsTextur(textures, 'blatt-symbol', blattSymbolRaster());
+}
+
+export function chefSchluessel(richtung: Richtung, schritt: number, bewegt: boolean): string {
+  return bewegt ? `chef-${richtung}-l${schritt}` : `chef-${richtung}-s`;
+}
+
+// Chef-Texturen (vier Richtungen, Stehbild und zwei Laufbilder)
+export function registriereChef(textures: Phaser.Textures.TextureManager): void {
+  for (const d of RICHTUNGEN) {
+    rasterAlsTextur(textures, chefSchluessel(d, 0, false), chefFigurBild(d, 0, false));
+    for (let s = 0; s < CHEF_SCHRITTE; s++) rasterAlsTextur(textures, chefSchluessel(d, s, true), chefFigurBild(d, s, true));
+  }
 }

@@ -70,7 +70,9 @@ describe('ladeInfos: kaputte Daten -> leer, kein Wurf', () => {
     ['JSON null', 'null'],
     ['infos ist Text', JSON.stringify({ ...gut, infos: 'abc' })],
     ['Eintrag ohne Text', JSON.stringify({ ...gut, infos: [{ npc: 'empfang', nachfrage: false, kaffee: false }] })],
-    ['Eintrag mit unbekanntem NPC', JSON.stringify({ ...gut, infos: [{ ...e1, npc: 'chef' }] })],
+    // A-010: 'chef' ist jetzt eine gültige Quelle (istInfoQuelle), der ungültige Wert wurde von 'chef' auf 'praktikant' geändert.
+    // Rotprobe: rot gesehen am 20.11.2026, Wächter lässt jeden Wert durch (inventar.ts:34), danach wieder grün.
+    ['Eintrag mit unbekanntem NPC', JSON.stringify({ ...gut, infos: [{ ...e1, npc: 'praktikant' }] })],
     ['Eintrag mit nachfrage als Text', JSON.stringify({ ...gut, infos: [{ ...e1, nachfrage: 'ja' }] })],
     ['Eintrag ist null', JSON.stringify({ ...gut, infos: [null] })],
     ['gegenstaende fehlt', JSON.stringify({ version: 1, infos: [e1] })],

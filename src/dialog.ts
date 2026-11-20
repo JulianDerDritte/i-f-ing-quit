@@ -1,5 +1,6 @@
 // Dialogsysteme (ohne Phaser): Dialogbaeume als Daten, Gespraechsablauf, Fensterlayout.
-import { DIALOG_LAYOUT, NACHFRAGE_KOSTEN, zeitText } from './config.ts';
+import { CHEF_NACHFRAGE_KOSTEN, DIALOG_LAYOUT, NACHFRAGE_KOSTEN, zeitText } from './config.ts';
+import { CHEF_DIALOGBAEUME } from './chefdialoge.ts';
 
 export interface Antwort {
   text: string;
@@ -23,6 +24,7 @@ export interface Dialogbaum {
 }
 
 export const DIALOGE: Record<string, Dialogbaum> = {
+  ...CHEF_DIALOGBAEUME,
   empfang: {
     start: 'start',
     knoten: {
@@ -291,7 +293,7 @@ export function starteGespraech(dialogId: string): DialogZustand {
 
 // Kosten (ganze Sekunden) der Nachfragen dieses Dialogbaums, aus der Konfiguration (Dialog-id = NPC-id).
 export function nachfrageSekunden(dialogId: string): number {
-  const k = (NACHFRAGE_KOSTEN as Record<string, number>)[dialogId];
+  const k = ({ ...NACHFRAGE_KOSTEN, ...CHEF_NACHFRAGE_KOSTEN } as Record<string, number>)[dialogId];
   if (k === undefined) throw new Error(`Keine Nachfragekosten fuer ${dialogId}`);
   return k;
 }

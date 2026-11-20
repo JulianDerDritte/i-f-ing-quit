@@ -1,11 +1,12 @@
 // Inventar (ohne Phaser): erhaltene Infos und Gegenstaende, Seitenaufteilung, Fensterlayout.
 import { INVENTAR_LAYOUT, NPC_IDS } from './config.ts';
-import type { NpcId } from './config.ts';
+import type { InfoQuelle, NpcId } from './config.ts';
+import { CHEF_DIALOGE } from './chef.ts';
 import type { DialogZustand, Rechteck } from './dialog.ts';
 import { NPCS } from './npcs.ts';
 
 export interface InfoEintrag {
-  npc: NpcId;
+  npc: InfoQuelle;
   text: string;
   nachfrage: boolean; // stammt aus einer Nachfrage
   kaffee: boolean; // stammt aus der Kaffee-Uebergabe
@@ -28,6 +29,18 @@ export function istNpcId(wert: unknown): wert is NpcId {
   return typeof wert === 'string' && (NPC_IDS as readonly string[]).includes(wert);
 }
 
+// Gueltige Quelle einer Info: einer der fuenf NPCs oder 'chef' (nicht die Dialog-ids chef1 bis chef3).
+export function istInfoQuelle(wert: unknown): wert is InfoQuelle {
+  return istNpcId(wert) || wert === 'chef';
+}
+
+// Quelle eines Gespraechs: NPC-id, oder 'chef' fuer die Chef-Baeume; sonst Fehler.
+function quelleVonDialog(dialogId: string): InfoQuelle {
+  if (istNpcId(dialogId)) return dialogId;
+  if (CHEF_DIALOGE.includes(dialogId)) return 'chef';
+  throw new Error(`Dialog ${dialogId} gehoert zu keinem NPC`);
+}
+
 export function neuesInventar(infos: InfoEintrag[], kaffee: boolean): Inventar {
   return { infos, gegenstaende: gegenstaendeListe(kaffee) };
 }
@@ -46,8 +59,7 @@ export function infoEintragen(inv: Inventar, e: InfoEintrag): Inventar {
 // Uebernimmt alle bisher im Gespraech erhaltenen Infos (Dialog-id = NPC-id). Was ein Gespraech nicht erreicht oder
 // durch Verschuetten verpasst hat, steht nicht in dialog.infos und kommt deshalb nie hinein.
 export function ausGespraech(inv: Inventar, dialog: DialogZustand): Inventar {
-  if (!istNpcId(dialog.dialogId)) throw new Error(`Dialog ${dialog.dialogId} gehoert zu keinem NPC`);
-  const npc = dialog.dialogId;
+  const npc = quelleVonDialog(dialog.dialogId);
   let neu = inv;
   for (const text of dialog.infos) {
     neu = infoEintragen(neu, {
@@ -81,7 +93,8 @@ export function zeilenAnzahl(text: string, breite: number): number {
   return zeilen;
 }
 
-function rolle(id: NpcId): string {
+function rolle(id: InfoQuelle): string {
+  if (id === 'chef') return 'Chef';
   const d = NPCS.find((n) => n.id === id);
   if (d === undefined) throw new Error(`NPC ${id} unbekannt`);
   return d.name;
@@ -97,7 +110,7 @@ export function inventarSeiten(
   if (inv.infos.length === 0) return ['Noch keine Infos gesammelt.'];
   const seiten: string[][] = [[]];
   let zeilen = 0;
-  for (const id of NPC_IDS) {
+  for (const id of [...NPC_IDS, 'chef' as const]) {
     const eintraege = inv.infos.filter((i) => i.npc === id).map((i) => `- ${i.text}${vermerk(i)}`);
     let kopfSteht = false;
     for (const eintrag of eintraege) {

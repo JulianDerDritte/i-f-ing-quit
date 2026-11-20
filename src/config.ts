@@ -23,6 +23,25 @@ export const DIALOG_SEKUNDEN = {
 
 export type NpcId = 'empfang' | 'buchhaltung' | 'teamleitung' | 'it' | 'vertrieb';
 export const NPC_IDS: readonly NpcId[] = ['empfang', 'buchhaltung', 'teamleitung', 'it', 'vertrieb'];
+// Quelle einer Info im Inventar: ein NPC oder der Chef (der Chef ist kein NpcId: keine Route, keine Farbe).
+export type InfoQuelle = NpcId | 'chef';
+
+// Der Chef (A-010): Ring um den Schreibtisch (Zellmitten; Ablagezelle (27,5) liegt auf dem Ring), Zyklus 10 s = 8 s Runde + 2 s Stehen.
+// Tempo = Ringlaenge / Rundenzeit = 12 / 8 = 1,5 Zellen/s (= NPC_TEMPO).
+export const CHEF_RING: [number, number][] = [
+  [28.5, 2.5],
+  [29.5, 2.5],
+  [29.5, 5.5],
+  [26.5, 5.5],
+  [26.5, 2.5],
+  [28.5, 2.5],
+];
+export const CHEF_ZYKLUS_SEKUNDEN = 10;
+export const CHEF_RUNDE_SEKUNDEN = 8;
+export const CHEF_SCHUTZ_SEKUNDEN = 5; // nach einem Gespraech kein erneutes Erwischen (Spielzeit)
+export const CHEF_TEILSCHRITT_SEKUNDEN = 0.1; // groesster Zeitschritt der Chef-Fortschreibung
+export const CHEF_DIALOG_KOSTEN = 4; // Sekunden, gilt fuer alle drei Chef-Gespraeche
+export const CHEF_NACHFRAGE_KOSTEN: Record<'chef1' | 'chef2' | 'chef3', number> = { chef1: 3, chef2: 3, chef3: 3 };
 
 // Dialogkosten je NPC (ganze Sekunden, zwischen DIALOG_SEKUNDEN.min und .max).
 export const NPC_DIALOG_KOSTEN: Record<NpcId, number> = {
@@ -395,6 +414,7 @@ export const SZENEN_TEXTE = {
   nochmal: 'Nochmal',
   neustart: 'Neustart',
   zumMenue: 'Zum Menü',
+  chefName: 'Chef',
   inventarTitel: 'Inventar',
   zurueck: 'Zurück',
   weiter: 'Weiter',

@@ -33,6 +33,7 @@ import {
   MELDUNG_SCHRIFT_PX,
   MELDUNG_ZEIT_SCHRIFT_PX,
   NPC_DIALOG_KOSTEN,
+  CHEF_DIALOG_KOSTEN,
   NPC_SCHRIFT_PX,
   OVERLAY_ABDUNKLUNG,
   STUFEN_NAMEN,
@@ -79,10 +80,12 @@ import type { Eingabe, Position } from './bewegung.ts';
 import { BEREICH_ANZEIGE, KARTE, bereichAnZelle, zellArt } from './karte.ts';
 import type { BereichName } from './karte.ts';
 import { gitterZuBild } from './projektion.ts';
-import { NPC_SCHRITTE, SPIELER_SCHRITTE } from './grafik/figuren.ts';
+import { CHEF_SCHRITTE, NPC_SCHRITTE, SPIELER_SCHRITTE } from './grafik/figuren.ts';
+import { chefErwischt, chefGespraechEnde, chefPosition, chefSchritte } from './chef.ts';
+import type { ChefZustand } from './chef.ts';
 import { figurZustand, neuerFigurZustand, stehen } from './grafik/animation.ts';
 import type { FigurZustand } from './grafik/animation.ts';
-import { BODEN_TEXTUR, figurSchluessel, npcSchluessel, registriereFiguren, registriereUi, registriereWelt } from './grafik/texturen.ts';
+import { BODEN_TEXTUR, chefSchluessel, figurSchluessel, npcSchluessel, registriereChef, registriereFiguren, registriereUi, registriereWelt } from './grafik/texturen.ts';
 import { PixelText, knopfBauen, neueTextur, pixelTexteAufraeumen, zeichneRechtecke } from './grafik/pixeltext.ts';
 import type { KnopfTeil } from './grafik/pixeltext.ts';
 import { blinkAn, fensterRechtecke, plaketteRaster, plaketteRechtecke, stufenZeile, zeitZiffern } from './grafik/ui.ts';
@@ -103,6 +106,12 @@ export class SpielScene extends Phaser.Scene {
   private figurSchatten!: Phaser.GameObjects.Image;
   private figZ!: FigurZustand;
   private npcZ: FigurZustand[] = [];
+  private chef!: ChefZustand;
+  private chefBild!: Phaser.GameObjects.Image;
+  private chefSchatten!: Phaser.GameObjects.Image;
+  private chefZ!: FigurZustand;
+  private chefName!: PixelText;
+  private dialogIstChef = false; // das offene Gespraech ist ein Chef-Gespraech (danach beginnt die Schutzfrist)
   private npcSchatten: Phaser.GameObjects.Image[] = [];
   private folgeZiel!: Phaser.GameObjects.Zone;
   private raumText!: PixelText;
@@ -202,6 +211,8 @@ export class SpielScene extends Phaser.Scene {
     const lauf = neuerLauf(this.startSekunden, this.speicher);
     this.zustand = lauf.zustand;
     this.welt = lauf.welt;
+    this.chef = lauf.chef;
+    this.dialogIstChef = false;
     this.kaffee = lauf.kaffee;
     this.inventar = lauf.inventar;
     this.dialog = null;
@@ -217,11 +228,21 @@ export class SpielScene extends Phaser.Scene {
     });
     this.npcNamen = NPCS.map((d) => new PixelText(this, 0, 0, d.name, { skala: pixelSkala(NPC_SCHRIFT_PX), farbe: 0xffffff, rand: PALETTE.umriss, ox: 0.5, oy: 1 }));
 
+    // Der Chef: laeuft nach der Zeit um seinen Schreibtisch (chef.ts), Bild und Name wie die NPCs.
+    registriereChef(this.textures);
+    const cp = chefPosition(this.chef.t);
+    const cb = gitterZuBild(cp.x, cp.y);
+    this.chefZ = neuerFigurZustand(cb.x, cb.y, 'ur');
+    this.chefSchatten = this.add.image(cb.x, cb.y, 'schatten').setScale(SPRITE_SKALA).setAlpha(FIGUR_DARSTELLUNG.schattenAlpha);
+    this.chefBild = this.add.image(cb.x, cb.y, chefSchluessel('ur', 0, false)).setOrigin(0.5, 1).setScale(SPRITE_SKALA);
+    this.chefName = new PixelText(this, 0, 0, SZENEN_TEXTE.chefName, { skala: pixelSkala(NPC_SCHRIFT_PX), farbe: 0xffffff, rand: PALETTE.umriss, ox: 0.5, oy: 1 });
+
     this.baueAnzeige(stufe);
     this.baueDialogFenster();
     this.baueInventarFenster();
     this.zeichneFigur(0);
     this.zeichneNpcs(0);
+    this.zeichneChef(0);
   }
 
   update(_zeit: number, delta: number): void {
@@ -258,6 +279,10 @@ export class SpielScene extends Phaser.Scene {
     this.pos = schritt(KARTE, this.pos, eingabe, dt);
     this.welt = npcsFortschreiben(this.welt, dt, this.zustand.phase);
     this.zeichneNpcs(delta);
+    // Chef: Zeit wie der Timer (ungekappt), in Teilschritten von hoechstens 0,1 s; der Kontakt wird je Teilschritt geprueft.
+    const ch = chefSchritte(this.chef, delta / 1000, this.pos.x, this.pos.y, this.zustand.phase);
+    this.chef = ch.chef;
+    this.zeichneChef(delta);
 
     const b =bereichAnZelle(KARTE, Math.floor(this.pos.x), Math.floor(this.pos.y));
     if (b !== null && b !== this.bereich) {
@@ -286,6 +311,7 @@ export class SpielScene extends Phaser.Scene {
 
     const kontakt = kontaktNpc(this.welt, this.pos.x, this.pos.y, this.zustand.phase);
     if (kontakt !== null) this.oeffneDialog(kontakt);
+    else if (ch.kontakt && this.zustand.phase === 'laeuft') this.oeffneChefGespraech(); // Vorrang: NPC; Phase neu gelesen
   }
 
   // Meldung "Kaffee verschüttet!" laeuft nach echter Zeit ab, in jeder Phase (kein Zeitgeber, der einen Neustart ueberlebt).
@@ -374,17 +400,30 @@ export class SpielScene extends Phaser.Scene {
     const def = NPCS.find((d) => d.id === id);
     if (def === undefined) throw new Error(`NPC ${id} unbekannt`);
     markiereGesprochen(this.welt, id);
+    this.dialogIstChef = false;
+    this.oeffneGespraech(def.name, def.dialogId, NPC_DIALOG_KOSTEN[id]);
+  }
+
+  // Der Chef erwischt die Figur: n-tes Gespraech dieses Laufs (chef1, chef2, chef3, ...), Kosten CHEF_DIALOG_KOSTEN.
+  private oeffneChefGespraech(): void {
+    const e = chefErwischt(this.chef);
+    this.chef = e.chef;
+    this.dialogIstChef = true;
+    this.oeffneGespraech(SZENEN_TEXTE.chefName, e.dialogId, CHEF_DIALOG_KOSTEN);
+  }
+
+  private oeffneGespraech(name: string, dialogId: string, kosten: number): void {
     this.figurSteht();
-    this.zustand = abziehen(this.zustand, NPC_DIALOG_KOSTEN[id]);
+    this.zustand = abziehen(this.zustand, kosten);
     this.setzeHinweis('keiner');
     this.zeigeTimer();
     if (this.zustand.phase === 'niederlage') {
       this.zeigeMeldung();
       return;
     }
-    this.dialog = starteGespraech(def.dialogId);
-    this.dialogName.setText(def.name);
-    this.dialogKosten.setText(kostenZeile(zeitText(NPC_DIALOG_KOSTEN[id])));
+    this.dialog = starteGespraech(dialogId);
+    this.dialogName.setText(name);
+    this.dialogKosten.setText(kostenZeile(zeitText(kosten)));
     this.dialogObjekte.forEach((o) => o.setVisible(true));
     this.zeigeKnoten();
   }
@@ -461,6 +500,10 @@ export class SpielScene extends Phaser.Scene {
       if (f.input) f.input.enabled = false;
     });
     this.zustand = dialogBeenden(this.zustand);
+    if (this.dialogIstChef) {
+      this.chef = chefGespraechEnde(this.chef);
+      this.dialogIstChef = false;
+    }
     // Eine waehrend des Gespraechs gedrueckte E-/Leertaste soll nicht nachtraeglich ablegen.
     this.ablegeTasten.forEach((k) => Phaser.Input.Keyboard.JustDown(k));
   }
@@ -508,10 +551,23 @@ export class SpielScene extends Phaser.Scene {
     });
   }
 
+  // Chef: Bild nach Blickrichtung und Laufschritt aus der Bewegung des Bildes (Stehphase und Gespraech: Stehbild); Tiefe x + y.
+  private zeichneChef(deltaMs: number): void {
+    const p = chefPosition(this.chef.t);
+    const bild = gitterZuBild(p.x, p.y);
+    this.chefZ = figurZustand(this.chefZ, bild.x, bild.y, deltaMs, CHEF_SCHRITTE);
+    const z = this.chefZ;
+    this.chefBild.setTexture(chefSchluessel(z.richtung, z.schritt, z.bewegt)).setPosition(bild.x, bild.y).setDepth(p.x + p.y);
+    this.chefSchatten.setPosition(bild.x, bild.y).setDepth(p.x + p.y - 0.01);
+    this.chefName.setPosition(bild.x, bild.y - FIGUR_DARSTELLUNG.nameHoehe).setDepth(p.x + p.y);
+  }
+
   // Spieler und NPCs zeigen das Stehbild (Gespraech, Inventar, Ende), die Blickrichtung bleibt.
   private figurSteht(): void {
     this.figZ = stehen(this.figZ);
     this.figurBild.setTexture(figurSchluessel(this.figZ.richtung, 0, false));
+    this.chefZ = stehen(this.chefZ);
+    this.chefBild.setTexture(chefSchluessel(this.chefZ.richtung, 0, false));
     NPCS.forEach((d, i) => {
       this.npcZ[i] = stehen(this.npcZ[i]);
       this.npcBilder[i].setTexture(npcSchluessel(d.id, this.npcZ[i].richtung, 0, false));
@@ -633,6 +689,7 @@ export class SpielScene extends Phaser.Scene {
     const g = bodenGroesse(KARTE);
     this.add.image(g.ursprungX, 0, BODEN_TEXTUR).setOrigin(0, 0).setScale(SPRITE_SKALA).setDepth(BODEN_TIEFE);
     for (const o of weltObjekte(KARTE)) {
+      if (o.art === 'chef') continue; // der Chef wird beweglich gezeichnet (zeichneChef)
       this.add.image(o.bildX, o.bildY, o.schluessel).setOrigin(0.5, 1).setScale(SPRITE_SKALA).setDepth(o.tiefe);
       if (o.art === 'maschine') {
         // Kaffeemaschine: Beschriftung in Pixelschrift.
