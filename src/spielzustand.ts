@@ -4,7 +4,7 @@ import type { Stufe } from './config.ts';
 import { bereichAnZelle } from './karte.ts';
 import type { Karte } from './karte.ts';
 
-export type Phase = 'laeuft' | 'dialog' | 'sieg' | 'niederlage';
+export type Phase = 'laeuft' | 'dialog' | 'sieg' | 'niederlage' | 'inventar';
 
 export interface Spielzustand {
   phase: Phase;
@@ -47,6 +47,25 @@ export function nachfrageAbziehen(z: Spielzustand, kosten: number): Spielzustand
 // Gespraechsende: zurueck in Phase 'laeuft' mit dem Rest nach dem Abzug.
 export function dialogBeenden(z: Spielzustand): Spielzustand {
   if (z.phase !== 'dialog') return z;
+  return { phase: 'laeuft', rest: z.rest };
+}
+
+// Zeitabzug ohne Phasenwechsel (Kaffee nehmen): wirkt nur in Phase 'laeuft'; bleibt nichts uebrig, ist das Spiel verloren.
+export function sofortAbziehen(z: Spielzustand, kosten: number): Spielzustand {
+  if (z.phase !== 'laeuft') return z;
+  const rest = z.rest - kosten;
+  if (rest <= REST_EPS) return { phase: 'niederlage', rest: 0 };
+  return { phase: 'laeuft', rest };
+}
+
+// Inventarfenster: Timer, Figur und NPCs stehen (alle Funktionen wirken nur in 'laeuft'); der Rest bleibt unveraendert.
+export function inventarOeffnen(z: Spielzustand): Spielzustand {
+  if (z.phase !== 'laeuft') return z;
+  return { phase: 'inventar', rest: z.rest };
+}
+
+export function inventarSchliessen(z: Spielzustand): Spielzustand {
+  if (z.phase !== 'inventar') return z;
   return { phase: 'laeuft', rest: z.rest };
 }
 

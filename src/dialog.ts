@@ -5,12 +5,15 @@ export interface Antwort {
   text: string;
   nachfrage?: boolean; // Nachfrage: kostet Zeit (NACHFRAGE_KOSTEN), je Gespraech einmal waehlbar, bringt eine Zusatz-info
   weiter: string | null; // Id des Folgeknotens; null beendet das Gespraech
-  info?: string; // Information, nur gespeichert (Inventar folgt in Stufe 6)
+  info?: string; // Information, die diese Antwort bringt (kommt ins Inventar)
+  verschuettet?: boolean; // Handbewegung: beendet das Gespraech sofort, wenn die Figur Kaffee traegt (Kaffee ist dann weg)
+  kaffeeUebergabe?: boolean; // nur im Feld Knoten.kaffeeAntwort: der Kaffee wird uebergeben und ist danach weg
 }
 
 export interface Knoten {
   text: string;
   antworten: Antwort[]; // 2 bis 3
+  kaffeeAntwort?: Antwort; // zusaetzliche Antwort, die nur angeboten wird, solange die Figur Kaffee traegt (Index = antworten.length)
   info?: string; // Information, die beim Betreten des Knotens gespeichert wird
 }
 
@@ -27,7 +30,7 @@ export const DIALOGE: Record<string, Dialogbaum> = {
         text: 'Guten Morgen! Haben Sie einen Termin? Ich frage nur, weil sonst niemand freiwillig bei mir vorbeikommt.',
         antworten: [
           { text: 'Ich muss kurz zum Chef.', weiter: 'chef' },
-          { text: 'Ich bin der neue Praktikant.', weiter: 'praktikant' },
+          { text: 'Wild gestikulieren: „Ich bin der neue Praktikant!“', weiter: 'praktikant', verschuettet: true },
           { text: 'Nachfragen', weiter: 'nachgefragt', nachfrage: true },
         ],
       },
@@ -73,7 +76,7 @@ export const DIALOGE: Record<string, Dialogbaum> = {
         text: 'Schon wieder jemand ohne Beleg! Haben Sie Ihre Reisekostenabrechnung dabei? Nein? Dann haben wir ein Problem.',
         antworten: [
           { text: 'Ich kündige.', weiter: 'kuendigen' },
-          { text: 'Welche Abrechnung?', weiter: 'abrechnung' },
+          { text: 'Wild gestikulieren: „Welche Abrechnung?“', weiter: 'abrechnung', verschuettet: true },
           { text: 'Nachfragen', weiter: 'nachgefragt', nachfrage: true },
         ],
       },
@@ -119,8 +122,17 @@ export const DIALOGE: Record<string, Dialogbaum> = {
         text: 'Gut, dass ich Sie treffe! Haben Sie kurz Zeit? Es dauert nur ein Meeting. Oder zwei. Maximal ein Dutzend.',
         antworten: [
           { text: 'Ich habe leider keine Zeit.', weiter: 'ausrede' },
-          { text: 'Worum geht es denn?', weiter: 'thema' },
+          { text: 'Wild gestikulieren: „Worum geht es denn?“', weiter: 'thema', verschuettet: true },
           { text: 'Nachfragen', weiter: 'nachgefragt', nachfrage: true },
+        ],
+        kaffeeAntwort: { text: 'Kaffee überreichen', weiter: 'kaffee', kaffeeUebergabe: true },
+      },
+      kaffee: {
+        text: 'Kaffee! Sie sind der Erste seit Wochen, der mitdenkt. Zum Dank ein Tipp: Der Chef trägt im Büro Kopfhörer und hört nichts.',
+        info: 'Der Chef trägt im Büro Kopfhörer und hört keine Schritte.',
+        antworten: [
+          { text: 'Gern geschehen.', weiter: null },
+          { text: 'Das war mein letzter Kaffee.', weiter: null },
         ],
       },
       nachgefragt: {
@@ -165,7 +177,7 @@ export const DIALOGE: Record<string, Dialogbaum> = {
         text: 'IT-Support, guten Tag. Haben Sie es schon mit Aus- und Wiedereinschalten versucht? Das löst fast alles.',
         antworten: [
           { text: 'Ich habe ein anderes Problem.', weiter: 'problem' },
-          { text: 'Ja, selbstverständlich.', weiter: 'luege' },
+          { text: 'Wild gestikulieren: „Ja, selbstverständlich!“', weiter: 'luege', verschuettet: true },
           { text: 'Nachfragen', weiter: 'nachgefragt', nachfrage: true },
         ],
       },
@@ -211,7 +223,7 @@ export const DIALOGE: Record<string, Dialogbaum> = {
         text: 'Hey! Genau der Richtige! Ich habe ein Angebot, das Sie nicht ablehnen können: ein Abonnement für Büroklammern.',
         antworten: [
           { text: 'Ich nehme nichts, danke.', weiter: 'absage' },
-          { text: 'Was kostet das?', weiter: 'preis' },
+          { text: 'Wild gestikulieren: „Was kostet das?“', weiter: 'preis', verschuettet: true },
           { text: 'Nachfragen', weiter: 'nachgefragt', nachfrage: true },
         ],
       },
@@ -253,8 +265,10 @@ export const DIALOGE: Record<string, Dialogbaum> = {
 export interface DialogZustand {
   dialogId: string;
   knoten: string | null;
-  infos: string[]; // bisher gesammelte Informationen (nur gespeichert)
+  infos: string[]; // bisher gesammelte Informationen
   nachfrageInfos: string[]; // davon die Informationen, die aus einer Nachfrage stammen (nur Vermerk)
+  kaffeeInfos: string[]; // davon die Informationen, die aus der Kaffee-Uebergabe stammen (nur Vermerk)
+  kaffeeWeg: 'verschuettet' | 'uebergeben' | null; // was in diesem Gespraech mit dem Kaffee geschah
   genutzt: string[]; // bereits gewaehlte Nachfragen ("knoten:index"), je Gespraech nur einmal waehlbar
 }
 
@@ -272,7 +286,7 @@ function betreten(b: Dialogbaum, id: string, infos: string[]): string[] {
 
 export function starteGespraech(dialogId: string): DialogZustand {
   const b = baum(dialogId);
-  return { dialogId, knoten: b.start, infos: betreten(b, b.start, []), nachfrageInfos: [], genutzt: [] };
+  return { dialogId, knoten: b.start, infos: betreten(b, b.start, []), nachfrageInfos: [], kaffeeInfos: [], kaffeeWeg: null, genutzt: [] };
 }
 
 // Kosten (ganze Sekunden) der Nachfragen dieses Dialogbaums, aus der Konfiguration (Dialog-id = NPC-id).
@@ -296,8 +310,9 @@ export function nachfrageKosten(z: DialogZustand, index: number): number | null 
   return nachfrageSekunden(z.dialogId);
 }
 
-// Antworten, die jetzt angeboten werden (bereits gewaehlte Nachfragen entfallen), mit ihrem echten Index.
-export function angeboteneAntworten(z: DialogZustand): { index: number; antwort: Antwort }[] {
+// Antworten, die jetzt angeboten werden (bereits gewaehlte Nachfragen entfallen; die Kaffee-Antwort nur mit Kaffee),
+// mit ihrem echten Index.
+export function angeboteneAntworten(z: DialogZustand, traegtKaffee = false): { index: number; antwort: Antwort }[] {
   const k = aktuellerKnoten(z);
   if (k === null) return [];
   const aus: { index: number; antwort: Antwort }[] = [];
@@ -305,6 +320,7 @@ export function angeboteneAntworten(z: DialogZustand): { index: number; antwort:
     if (antwort.nachfrage === true && z.genutzt.includes(genutztSchluessel(z, index))) return;
     aus.push({ index, antwort });
   });
+  if (traegtKaffee && k.kaffeeAntwort !== undefined) aus.push({ index: k.antworten.length, antwort: k.kaffeeAntwort });
   return aus;
 }
 
@@ -319,23 +335,39 @@ export function aktuellerKnoten(z: DialogZustand): Knoten | null {
   return baum(z.dialogId).knoten[z.knoten] ?? null;
 }
 
+// Antwort zu einem Index: die Antworten des Knotens, an letzter Stelle die Kaffee-Antwort (nur mit Kaffee).
+function antwortZuIndex(k: Knoten, index: number, traegtKaffee: boolean): Antwort | undefined {
+  if (index < k.antworten.length) return k.antworten[index];
+  if (index === k.antworten.length && traegtKaffee) return k.kaffeeAntwort;
+  return undefined;
+}
+
 // Waehlt die Antwort mit dem Index. Ein ungueltiger Index (nicht ganzzahlig, kleiner 0, nicht kleiner als
-// die Zahl der Antworten) oder ein beendetes Gespraech aendert nichts und wirft keinen Fehler.
-export function antworte(z: DialogZustand, index: number): DialogZustand {
+// die Zahl der Antworten; die Kaffee-Antwort zaehlt nur mit Kaffee) oder ein beendetes Gespraech aendert nichts
+// und wirft keinen Fehler. Traegt die Figur Kaffee und ist die Antwort eine Handbewegung (verschuettet), endet
+// das Gespraech sofort: der Kaffee ist verschuettet, die Infos hinter der Antwort sind verpasst.
+export function antworte(z: DialogZustand, index: number, traegtKaffee = false): DialogZustand {
   const k = aktuellerKnoten(z);
   if (k === null) return z;
-  if (!Number.isInteger(index) || index < 0 || index >= k.antworten.length) return z;
-  const a = k.antworten[index];
+  if (!Number.isInteger(index) || index < 0) return z;
+  const a = antwortZuIndex(k, index, traegtKaffee);
+  if (a === undefined) return z;
   const nachfrage = a.nachfrage === true;
   if (nachfrage && z.genutzt.includes(genutztSchluessel(z, index))) return z;
+  if (a.verschuettet === true && traegtKaffee) {
+    return { ...z, knoten: null, kaffeeWeg: 'verschuettet' };
+  }
   const vorher = z.infos.length;
   let infos = a.info !== undefined ? [...z.infos, a.info] : z.infos;
   const genutzt = nachfrage ? [...z.genutzt, genutztSchluessel(z, index)] : z.genutzt;
   const ziel = a.weiter;
   if (ziel !== null) infos = betreten(baum(z.dialogId), ziel, infos);
-  // Infos, die diese Antwort neu bringt, gelten bei einer Nachfrage als Nachfrage-Infos.
+  // Infos, die diese Antwort neu bringt, gelten bei einer Nachfrage als Nachfrage-Infos, bei der Uebergabe als Kaffee-Infos.
   const nachfrageInfos = nachfrage ? [...z.nachfrageInfos, ...infos.slice(vorher)] : z.nachfrageInfos;
-  return { dialogId: z.dialogId, knoten: ziel, infos, nachfrageInfos, genutzt };
+  const uebergabe = a.kaffeeUebergabe === true;
+  const kaffeeInfos = uebergabe ? [...z.kaffeeInfos, ...infos.slice(vorher)] : z.kaffeeInfos;
+  const kaffeeWeg = uebergabe ? 'uebergeben' : z.kaffeeWeg;
+  return { dialogId: z.dialogId, knoten: ziel, infos, nachfrageInfos, kaffeeInfos, kaffeeWeg, genutzt };
 }
 
 export function istBeendet(z: DialogZustand): boolean {
@@ -358,11 +390,15 @@ export interface DialogRechtecke {
 }
 
 // Rechtecke des Dialogfensters fuer n Antwortknoepfe (Bildpunkte). Die Szene zeichnet genau diese.
+// Bis 3 Antworten bleibt das Fenster, wie es ist; jede weitere Antwort schiebt die Oberkante um einen Knopf nach oben
+// (die Unterkante bleibt).
 export function dialogRechtecke(n: number): DialogRechtecke {
   const L = DIALOG_LAYOUT;
+  const extra = Math.max(0, n - 3) * (L.knopfHoehe + L.knopfLuecke);
+  const fensterY = L.fensterY - extra;
   const innenX = L.fensterX + L.randX;
   const innenBreite = L.fensterBreite - 2 * L.randX;
-  let y = L.fensterY + L.randOben;
+  let y = fensterY + L.randOben;
   const name = { x: innenX, y, breite: innenBreite, hoehe: L.nameHoehe };
   y += L.nameHoehe + L.luecke;
   const text = { x: innenX, y, breite: innenBreite, hoehe: L.textHoehe };
@@ -375,7 +411,7 @@ export function dialogRechtecke(n: number): DialogRechtecke {
     y += L.knopfHoehe + L.knopfLuecke;
   }
   return {
-    fenster: { x: L.fensterX, y: L.fensterY, breite: L.fensterBreite, hoehe: L.fensterHoehe },
+    fenster: { x: L.fensterX, y: fensterY, breite: L.fensterBreite, hoehe: L.fensterHoehe + extra },
     name,
     text,
     kosten,

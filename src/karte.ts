@@ -1,5 +1,5 @@
 // Karte als Daten (ohne Phaser). Zelle (x, y) belegt [x, x+1) x [y, y+1).
-// Zeichen: '#' Wand, '.' Boden, 'T' Tisch (Hindernis), 'S' Start, 'A' Ablagezelle.
+// Zeichen: '#' Wand, '.' Boden, 'T' Tisch (Hindernis), 'S' Start, 'A' Ablagezelle, 'K' Kaffeemaschine (fest).
 
 export type BereichName = 'Vorzimmer' | 'Grossraumbuero' | 'Chefbuero';
 
@@ -31,6 +31,7 @@ export interface Karte {
   tueren: Tuer[];
   start: [number, number];
   ablage: [number, number];
+  kaffee: [number, number]; // Zelle der Kaffeemaschine
 }
 
 const ZEILEN: string[] = [
@@ -49,7 +50,7 @@ const ZEILEN: string[] = [
   '#........#..............#......#',
   '#...S....#..............#......#',
   '#........#..............#......#',
-  '#........#..............#......#',
+  '#........#.K............#......#',
   '#........#..............#......#',
   '################################',
 ];
@@ -89,9 +90,10 @@ export const KARTE: Karte = {
   ],
   start: findeZeichen(ZEILEN, 'S'),
   ablage: findeZeichen(ZEILEN, 'A'),
+  kaffee: findeZeichen(ZEILEN, 'K'),
 };
 
-export type ZellArt = 'wand' | 'boden' | 'tisch';
+export type ZellArt = 'wand' | 'boden' | 'tisch' | 'maschine';
 
 export function zeichenAn(karte: Karte, x: number, y: number): string {
   if (x < 0 || y < 0 || x >= karte.breite || y >= karte.hoehe) return '#';
@@ -102,10 +104,11 @@ export function zellArt(karte: Karte, x: number, y: number): ZellArt {
   const z = zeichenAn(karte, x, y);
   if (z === '#') return 'wand';
   if (z === 'T') return 'tisch';
+  if (z === 'K') return 'maschine';
   return 'boden';
 }
 
-// Wand, Tisch und alles ausserhalb der Karte.
+// Wand, Tisch, Kaffeemaschine und alles ausserhalb der Karte.
 export function istFest(karte: Karte, x: number, y: number): boolean {
   return zellArt(karte, x, y) !== 'boden';
 }

@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
-import { STUFEN, STUFEN_NAMEN, TIMER_SEKUNDEN, zeitText } from './config.ts';
+import { MENUE_SPEICHER, STUFEN, STUFEN_NAMEN, TIMER_SEKUNDEN, zeitText } from './config.ts';
 import { auswahl } from './auswahl.ts';
+import { holeSpeicher, ladeInfos, loescheSpeicher } from './speicher.ts';
 
 export class MenueScene extends Phaser.Scene {
   constructor() {
@@ -36,6 +37,26 @@ export class MenueScene extends Phaser.Scene {
         auswahl.stufe = stufe;
         this.scene.start('Spiel');
       });
+    });
+
+    // Gespeicherte Infos (aus frueheren Laeufen) und "Speicher löschen".
+    const M = MENUE_SPEICHER;
+    const speicher = holeSpeicher();
+    const zahl = this.add
+      .text(M.textX, M.y, `Gespeicherte Infos: ${ladeInfos(speicher).length}`, { fontSize: `${M.schriftPx}px`, color: '#aaaaaa' })
+      .setOrigin(0, 0.5);
+    const loeschen = this.add
+      .rectangle(M.knopfX, M.y, M.knopfBreite, M.knopfHoehe, M.knopfFarbe)
+      .setStrokeStyle(2, 0xffffff)
+      .setInteractive({ useHandCursor: true });
+    this.add
+      .text(M.knopfX, M.y, 'Speicher löschen', { fontSize: `${M.knopfSchriftPx}px`, color: '#ffffff' })
+      .setOrigin(0.5);
+    loeschen.on('pointerover', () => loeschen.setFillStyle(M.knopfHoverFarbe));
+    loeschen.on('pointerout', () => loeschen.setFillStyle(M.knopfFarbe));
+    loeschen.on('pointerdown', () => {
+      loescheSpeicher(speicher);
+      zahl.setText(`Gespeicherte Infos: ${ladeInfos(speicher).length}`);
     });
   }
 }

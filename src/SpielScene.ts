@@ -15,12 +15,25 @@ import {
   DIALOG_TIEFE,
   FIGUR_FARBE,
   FIGUR_RADIUS,
+  DIALOG_MAX_ANTWORTEN,
   HINWEIS_SCHRIFT_PX,
   HUD_FARBE_NORMAL,
   HUD_FARBE_WARNUNG,
   HUD_SCHRIFT_PX,
+  HUD_TIEFE,
+  INVENTAR_FENSTER_FARBE,
+  INVENTAR_KNOPF,
+  INVENTAR_SCHRIFT_PX,
+  INVENTAR_TIEFE,
+  INVENTAR_TITEL_FARBE,
+  INVENTAR_TITEL_SCHRIFT_PX,
   KACHEL_BREITE,
   KACHEL_HOEHE,
+  KAFFEE_HINWEIS_TEXT,
+  KAFFEE_HUD,
+  MASCHINE_FARBE,
+  MASCHINE_HOEHE,
+  MASCHINE_SCHRIFT_PX,
   MAX_ZEITSCHRITT_SEKUNDEN,
   MELDUNG_KNOPF_SCHRIFT_PX,
   MELDUNG_SCHRIFT_PX,
@@ -35,6 +48,7 @@ import {
   TIMER_WARNUNG_SEKUNDEN,
   TISCH_FARBE,
   TISCH_HOEHE,
+  VERSCHUETTET_MELDUNG,
   WAND_FARBE,
   WAND_HOEHE,
   zeitText,
@@ -42,18 +56,24 @@ import {
 import type { NpcId, Stufe } from './config.ts';
 import {
   abziehen,
-  ablegen,
   dialogBeenden,
   fortschreiben,
+  inventarOeffnen,
+  inventarSchliessen,
   nachfrageAbziehen,
   istWarnung,
   nahAnAblage,
-  neuerZustand,
   startzeit,
   zeitAufgerundet,
 } from './spielzustand.ts';
 import type { Spielzustand } from './spielzustand.ts';
-import { NPCS, kontaktNpc, markiereGesprochen, neueWelt, npcPosition, npcsFortschreiben } from './npcs.ts';
+import { aktionsTaste, kaffeeNachAntwort, nahAnKaffee } from './kaffee.ts';
+import { ausGespraech, inventarRechtecke, inventarSeiten, mitKaffee } from './inventar.ts';
+import type { Inventar } from './inventar.ts';
+import { neuerLauf } from './lauf.ts';
+import { holeSpeicher, speichereInventar } from './speicher.ts';
+import type { SpeicherQuelle } from './speicher.ts';
+import { NPCS, kontaktNpc, markiereGesprochen, npcPosition, npcsFortschreiben } from './npcs.ts';
 import type { NpcWelt } from './npcs.ts';
 import {
   aktuellerKnoten,
@@ -93,8 +113,10 @@ export class SpielScene extends Phaser.Scene {
   private raumText!: Phaser.GameObjects.Text;
   private timerText!: Phaser.GameObjects.Text;
   private hinweisText!: Phaser.GameObjects.Text;
-  private hinweisSichtbar = false;
+  private hinweisArt: 'keiner' | 'ablage' | 'kaffee' = 'keiner';
   private ablegeTasten!: Phaser.Input.Keyboard.Key[];
+  private inventarTaste!: Phaser.Input.Keyboard.Key;
+  private escTaste!: Phaser.Input.Keyboard.Key;
   private zustand!: Spielzustand;
   private startSekunden = 0;
   private welt!: NpcWelt;
@@ -107,7 +129,21 @@ export class SpielScene extends Phaser.Scene {
   private dialogKosten!: Phaser.GameObjects.Text;
   private antwortFelder: Phaser.GameObjects.Rectangle[] = [];
   private antwortTexte: Phaser.GameObjects.Text[] = [];
-  private infos: string[] = []; // aus Gespraechen; Anzeige und Inventar folgen in Stufe 6
+  private dialogFenster!: Phaser.GameObjects.Rectangle;
+  private kaffee = false; // wird gerade Kaffee getragen?
+  private inventar!: Inventar;
+  private speicher: SpeicherQuelle | null = null;
+  private kaffeeSymbol!: Phaser.GameObjects.Rectangle;
+  private kaffeeText!: Phaser.GameObjects.Text;
+  private verschuettetText!: Phaser.GameObjects.Text;
+  private verschuettetRest = 0; // Restdauer der Meldung in Sekunden (echte Zeit, kein Zeitgeber)
+  private inventarObjekte: (Phaser.GameObjects.Rectangle | Phaser.GameObjects.Text)[] = [];
+  private inventarKnoepfe: Phaser.GameObjects.Rectangle[] = [];
+  private inventarInfoText!: Phaser.GameObjects.Text;
+  private inventarGegenText!: Phaser.GameObjects.Text;
+  private inventarAnzeige!: Phaser.GameObjects.Text;
+  private inventarSeitenTexte: string[] = [];
+  private inventarSeite = 0;
 
   constructor() {
     super('Spiel');
@@ -150,14 +186,22 @@ export class SpielScene extends Phaser.Scene {
     // Zustand und Eingabe frisch: keine haengende Taste, Timer voll, keine Meldung.
     kb.resetKeys();
     this.ablegeTasten = [kb.addKey(Phaser.Input.Keyboard.KeyCodes.E), kb.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE)];
+    this.inventarTaste = kb.addKey(Phaser.Input.Keyboard.KeyCodes.I);
+    this.escTaste = kb.addKey(Phaser.Input.Keyboard.KeyCodes.ESC);
     this.startSekunden = startzeit(stufe, window.location.search);
-    this.zustand = neuerZustand(this.startSekunden);
-    this.hinweisSichtbar = false;
+    this.hinweisArt = 'keiner';
 
-    // NPCs und Gespraeche: alles frisch (Start, keiner gesprochen, kein Fenster).
-    this.welt = neueWelt();
+    // Lauf frisch: Timer voll, NPCs am Start (keiner gesprochen), kein Kaffee, Inventar = gespeicherte Infos.
+    this.speicher = holeSpeicher();
+    const lauf = neuerLauf(this.startSekunden, this.speicher);
+    this.zustand = lauf.zustand;
+    this.welt = lauf.welt;
+    this.kaffee = lauf.kaffee;
+    this.inventar = lauf.inventar;
     this.dialog = null;
-    this.infos = [];
+    this.verschuettetRest = 0;
+    this.inventarSeitenTexte = [];
+    this.inventarSeite = 0;
     this.npcGrafiken = NPCS.map(() => this.add.graphics());
     this.npcNamen = NPCS.map((d) =>
       this.add
@@ -167,12 +211,25 @@ export class SpielScene extends Phaser.Scene {
 
     this.baueAnzeige(stufe);
     this.baueDialogFenster();
+    this.baueInventarFenster();
     this.zeichneFigur();
     this.zeichneNpcs();
   }
 
   update(_zeit: number, delta: number): void {
+    this.meldungZaehlen(delta / 1000);
+    // I und Escape werden in jedem Bild gelesen (auch wenn sie nichts tun), damit kein Druck liegen bleibt.
+    const iDruck = Phaser.Input.Keyboard.JustDown(this.inventarTaste);
+    const escDruck = Phaser.Input.Keyboard.JustDown(this.escTaste);
+    if (this.zustand.phase === 'inventar') {
+      if (iDruck || escDruck) this.schliesseInventar(); // Timer, Figur und NPCs stehen, bis das Fenster zu ist.
+      return;
+    }
     if (this.zustand.phase !== 'laeuft') return; // Gespraech, Sieg oder Niederlage: alles steht.
+    if (iDruck) {
+      this.oeffneInventar();
+      return;
+    }
 
     // Der Timer laeuft mit der echten Bildzeit, die Bewegung mit der gekuerzten.
     this.zustand = fortschreiben(this.zustand, delta / 1000);
@@ -201,14 +258,19 @@ export class SpielScene extends Phaser.Scene {
     }
     this.zeichneFigur();
 
-    const nah = nahAnAblage(KARTE, this.pos.x, this.pos.y);
-    if (nah !== this.hinweisSichtbar) {
-      this.hinweisSichtbar = nah;
-      this.hinweisText.setVisible(nah);
-    }
+    // Hinweis: an der Ablage hat sie Vorrang; an der Maschine nur, solange kein Kaffee getragen wird.
+    const art = nahAnAblage(KARTE, this.pos.x, this.pos.y)
+      ? 'ablage'
+      : !this.kaffee && nahAnKaffee(KARTE, this.pos.x, this.pos.y)
+        ? 'kaffee'
+        : 'keiner';
+    this.setzeHinweis(art);
     if (this.ablegeTasten.some((k) => Phaser.Input.Keyboard.JustDown(k))) {
-      this.zustand = ablegen(this.zustand, KARTE, this.pos.x, this.pos.y);
-      if (this.zustand.phase === 'sieg') {
+      const erg = aktionsTaste(this.zustand, this.kaffee, KARTE, this.pos.x, this.pos.y);
+      this.zustand = erg.zustand;
+      this.setzeKaffee(erg.kaffee);
+      this.zeigeTimer();
+      if (this.zustand.phase === 'sieg' || this.zustand.phase === 'niederlage') {
         this.zeigeMeldung();
         return;
       }
@@ -218,14 +280,93 @@ export class SpielScene extends Phaser.Scene {
     if (kontakt !== null) this.oeffneDialog(kontakt);
   }
 
+  // Meldung "Kaffee verschüttet!" laeuft nach echter Zeit ab, in jeder Phase (kein Zeitgeber, der einen Neustart ueberlebt).
+  private meldungZaehlen(dt: number): void {
+    if (this.verschuettetRest <= 0) return;
+    this.verschuettetRest -= dt;
+    if (this.verschuettetRest <= 0) this.verschuettetText.setVisible(false);
+  }
+
+  private setzeHinweis(art: 'keiner' | 'ablage' | 'kaffee'): void {
+    if (art === this.hinweisArt) return;
+    this.hinweisArt = art;
+    if (art === 'ablage') this.hinweisText.setText('E: Kündigung ablegen');
+    if (art === 'kaffee') this.hinweisText.setText(KAFFEE_HINWEIS_TEXT);
+    this.hinweisText.setVisible(art !== 'keiner');
+  }
+
+  // Kaffee getragen oder nicht: HUD und Gegenstaende folgen.
+  private setzeKaffee(kaffee: boolean): void {
+    if (kaffee === this.kaffee) return;
+    this.kaffee = kaffee;
+    this.inventar = mitKaffee(this.inventar, kaffee);
+    this.kaffeeSymbol.setVisible(kaffee);
+    this.kaffeeText.setVisible(kaffee);
+  }
+
+  // Schreibt das Inventar (Infos und Gegenstaende) in den Speicher; scheitert das, laeuft das Spiel ohne Speichern weiter.
+  private speichere(): void {
+    speichereInventar(this.speicher, mitKaffee(this.inventar, this.kaffee));
+  }
+
+  // Neue Infos aus dem Gespraech ins Inventar und sofort in den Speicher.
+  private inventarAbgleichen(dialog: DialogZustand): void {
+    const neu = ausGespraech(this.inventar, dialog);
+    if (neu === this.inventar) return;
+    this.inventar = neu;
+    this.speichere();
+  }
+
+  private zumMenue(): void {
+    this.speichere();
+    this.scene.start('Menue');
+  }
+
+  private oeffneInventar(): void {
+    this.zustand = inventarOeffnen(this.zustand);
+    if (this.zustand.phase !== 'inventar') return;
+    this.setzeHinweis('keiner');
+    this.inventarSeitenTexte = inventarSeiten(this.inventar);
+    this.inventarSeite = 0;
+    this.inventarGegenText.setText(`Gegenstände: ${this.inventar.gegenstaende.join(', ')}`);
+    this.inventarObjekte.forEach((o) => o.setVisible(true));
+    this.inventarKnoepfe.forEach((k) => {
+      if (k.input) k.input.enabled = true;
+    });
+    this.zeigeInventarSeite();
+  }
+
+  private schliesseInventar(): void {
+    this.zustand = inventarSchliessen(this.zustand);
+    this.inventarObjekte.forEach((o) => o.setVisible(false));
+    this.inventarKnoepfe.forEach((k) => {
+      if (k.input) k.input.enabled = false;
+    });
+    // Eine waehrend des Fensters gedrueckte E-/Leertaste soll nicht nachtraeglich wirken.
+    this.ablegeTasten.forEach((k) => Phaser.Input.Keyboard.JustDown(k));
+  }
+
+  private zeigeInventarSeite(): void {
+    const n = this.inventarSeitenTexte.length;
+    this.inventarInfoText.setText(this.inventarSeitenTexte[this.inventarSeite]);
+    this.inventarAnzeige.setText(`Seite ${this.inventarSeite + 1} von ${n}`);
+  }
+
+  private blaettere(richtung: number): void {
+    if (this.zustand.phase !== 'inventar') return;
+    const neu = this.inventarSeite + richtung;
+    if (neu < 0 || neu >= this.inventarSeitenTexte.length) return;
+    this.inventarSeite = neu;
+    this.zeigeInventarSeite();
+  }
+
   // Kontakt: Kosten sofort abziehen; reicht die Zeit nicht mehr, ist das Spiel verloren (kein Fenster).
   private oeffneDialog(id: NpcId): void {
     const def = NPCS.find((d) => d.id === id);
     if (def === undefined) throw new Error(`NPC ${id} unbekannt`);
     markiereGesprochen(this.welt, id);
     this.zustand = abziehen(this.zustand, NPC_DIALOG_KOSTEN[id]);
-    this.hinweisSichtbar = false;
-    this.hinweisText.setVisible(false);
+    this.setzeHinweis('keiner');
     this.zeigeTimer();
     if (this.zustand.phase === 'niederlage') {
       this.zeigeMeldung();
@@ -243,8 +384,14 @@ export class SpielScene extends Phaser.Scene {
     if (this.dialog === null) return;
     const k = aktuellerKnoten(this.dialog);
     if (k === null) return;
-    const angeboten = angeboteneAntworten(this.dialog);
+    const angeboten = angeboteneAntworten(this.dialog, this.kaffee);
     const r = dialogRechtecke(angeboten.length);
+    // Das Fenster waechst nach oben, wenn mehr als 3 Antworten angeboten werden: alle Teile folgen dem Layout.
+    this.dialogFenster.setPosition(r.fenster.x + r.fenster.breite / 2, r.fenster.y + r.fenster.hoehe / 2);
+    this.dialogFenster.setSize(r.fenster.breite, r.fenster.hoehe);
+    this.dialogName.setPosition(r.name.x, r.name.y);
+    this.dialogText.setPosition(r.text.x, r.text.y);
+    this.dialogKosten.setPosition(r.kosten.x, r.kosten.y);
     this.dialogText.setText(k.text);
     for (let i = 0; i < this.antwortFelder.length; i++) {
       const feld = this.antwortFelder[i];
@@ -265,18 +412,22 @@ export class SpielScene extends Phaser.Scene {
   // Slot = Platz des Knopfs im Fenster; der echte Antwortindex kommt aus den angebotenen Antworten.
   private waehleAntwort(slot: number): void {
     if (this.dialog === null || this.zustand.phase !== 'dialog') return;
-    const gewaehlt = angeboteneAntworten(this.dialog)[slot];
+    const gewaehlt = angeboteneAntworten(this.dialog, this.kaffee)[slot];
     if (gewaehlt === undefined) return;
     const kosten = nachfrageKosten(this.dialog, gewaehlt.index);
-    const neu = antworte(this.dialog, gewaehlt.index);
+    const neu = antworte(this.dialog, gewaehlt.index, this.kaffee);
     if (neu === this.dialog) return;
     this.dialog = neu;
+    // Verschuetten oder Uebergabe: der Kaffee ist weg; bei der Handbewegung erscheint die Meldung.
+    const hatteKaffee = this.kaffee;
+    this.setzeKaffee(kaffeeNachAntwort(this.kaffee, neu));
+    if (hatteKaffee && !this.kaffee && neu.kaffeeWeg === 'verschuettet') this.zeigeVerschuettet();
+    this.inventarAbgleichen(neu);
     if (kosten !== null) {
       // Nachfrage: Kosten sofort abziehen; reicht die Zeit nicht, ist das Spiel verloren (Meldung statt Fenster).
       this.zustand = nachfrageAbziehen(this.zustand, kosten);
       this.zeigeTimer();
       if (this.zustand.phase === 'niederlage') {
-        this.infos.push(...neu.infos);
         this.dialog = null;
         this.dialogObjekte.forEach((o) => o.setVisible(false));
         this.antwortFelder.forEach((f) => {
@@ -292,7 +443,6 @@ export class SpielScene extends Phaser.Scene {
 
   // Gespraechsende: Fenster aus, Timer laeuft weiter; Bewegung liest wieder den echten Tastenzustand.
   private schliesseDialog(): void {
-    if (this.dialog !== null) this.infos.push(...this.dialog.infos);
     this.dialog = null;
     this.dialogObjekte.forEach((o) => o.setVisible(false));
     this.antwortFelder.forEach((f) => {
@@ -304,7 +454,7 @@ export class SpielScene extends Phaser.Scene {
   }
 
   private baueDialogFenster(): void {
-    const r = dialogRechtecke(3);
+    const r = dialogRechtecke(DIALOG_MAX_ANTWORTEN); // Platz fuer alle Knoepfe; zeigeKnoten stellt je Knoten das Layout ein
     const f = r.fenster;
     this.dialogObjekte = [];
     this.antwortFelder = [];
@@ -315,13 +465,12 @@ export class SpielScene extends Phaser.Scene {
       y: q.y + q.hoehe / 2,
     });
     const fm = mitte(f);
-    this.dialogObjekte.push(
-      this.add
-        .rectangle(fm.x, fm.y, f.breite, f.hoehe, DIALOG_FENSTER_FARBE)
-        .setStrokeStyle(2, DIALOG_RAHMEN_FARBE)
-        .setScrollFactor(0)
-        .setDepth(tiefe),
-    );
+    this.dialogFenster = this.add
+      .rectangle(fm.x, fm.y, f.breite, f.hoehe, DIALOG_FENSTER_FARBE)
+      .setStrokeStyle(2, DIALOG_RAHMEN_FARBE)
+      .setScrollFactor(0)
+      .setDepth(tiefe);
+    this.dialogObjekte.push(this.dialogFenster);
     this.dialogName = this.add
       .text(r.name.x, r.name.y, '', { fontSize: `${DIALOG_NAME_SCHRIFT_PX}px`, color: DIALOG_NAME_FARBE, fontStyle: 'bold' })
       .setScrollFactor(0)
@@ -392,7 +541,8 @@ export class SpielScene extends Phaser.Scene {
 
   // Abdunkeln, Meldung und zwei Knoepfe. Wird genau einmal je Spiel aufgerufen (danach laeuft update nicht mehr).
   private zeigeMeldung(): void {
-    this.hinweisText.setVisible(false);
+    this.setzeHinweis('keiner');
+    this.speichere(); // Ende des Laufs: Infos und Gegenstaende in den Speicher
     this.zeigeTimer();
     const sieg = this.zustand.phase === 'sieg';
     const w = this.scale.width;
@@ -422,7 +572,92 @@ export class SpielScene extends Phaser.Scene {
         .setDepth(20001);
     }
     this.baueKnopf(w / 2 - 110, h / 2 + 30, 190, sieg ? 'Nochmal' : 'Neustart', () => this.scene.restart());
-    this.baueKnopf(w / 2 + 110, h / 2 + 30, 190, 'Zum Menü', () => this.scene.start('Menue'));
+    this.baueKnopf(w / 2 + 110, h / 2 + 30, 190, 'Zum Menü', () => this.zumMenue());
+  }
+
+  private zeigeVerschuettet(): void {
+    this.verschuettetRest = VERSCHUETTET_MELDUNG.sekunden;
+    this.verschuettetText.setVisible(true);
+  }
+
+  private baueInventarFenster(): void {
+    const r = inventarRechtecke();
+    this.inventarObjekte = [];
+    this.inventarKnoepfe = [];
+    const tiefe = INVENTAR_TIEFE;
+    const mitte = (q: { x: number; y: number; breite: number; hoehe: number }) => ({
+      x: q.x + q.breite / 2,
+      y: q.y + q.hoehe / 2,
+    });
+    const fm = mitte(r.fenster);
+    this.inventarObjekte.push(
+      this.add
+        .rectangle(fm.x, fm.y, r.fenster.breite, r.fenster.hoehe, INVENTAR_FENSTER_FARBE)
+        .setStrokeStyle(2, DIALOG_RAHMEN_FARBE)
+        .setScrollFactor(0)
+        .setDepth(tiefe),
+    );
+    this.inventarObjekte.push(
+      this.add
+        .text(r.titel.x, r.titel.y, 'Inventar', {
+          fontSize: `${INVENTAR_TITEL_SCHRIFT_PX}px`,
+          color: INVENTAR_TITEL_FARBE,
+          fontStyle: 'bold',
+        })
+        .setScrollFactor(0)
+        .setDepth(tiefe + 1),
+    );
+    this.inventarInfoText = this.add
+      .text(r.info.x, r.info.y, '', {
+        fontSize: `${INVENTAR_SCHRIFT_PX}px`,
+        color: '#ffffff',
+        wordWrap: { width: r.info.breite },
+      })
+      .setScrollFactor(0)
+      .setDepth(tiefe + 1);
+    this.inventarGegenText = this.add
+      .text(r.gegenstaende.x, r.gegenstaende.y, '', {
+        fontSize: `${INVENTAR_SCHRIFT_PX}px`,
+        color: DIALOG_KOSTEN_FARBE,
+        wordWrap: { width: r.gegenstaende.breite },
+      })
+      .setScrollFactor(0)
+      .setDepth(tiefe + 1);
+    this.inventarAnzeige = this.add
+      .text(mitte(r.anzeige).x, mitte(r.anzeige).y, '', { fontSize: `${INVENTAR_SCHRIFT_PX}px`, color: '#ffffff' })
+      .setOrigin(0.5)
+      .setScrollFactor(0)
+      .setDepth(tiefe + 1);
+    this.inventarObjekte.push(this.inventarInfoText, this.inventarGegenText, this.inventarAnzeige);
+    const knopf = (q: { x: number; y: number; breite: number; hoehe: number }, beschriftung: string, aktion: () => void) => {
+      const m = mitte(q);
+      const feld = this.add
+        .rectangle(m.x, m.y, q.breite, q.hoehe, DIALOG_KNOPF_FARBE)
+        .setStrokeStyle(2, DIALOG_RAHMEN_FARBE)
+        .setScrollFactor(0)
+        .setDepth(tiefe + 1)
+        .setInteractive({ useHandCursor: true });
+      const text = this.add
+        .text(m.x, m.y, beschriftung, { fontSize: `${INVENTAR_SCHRIFT_PX}px`, color: '#ffffff' })
+        .setOrigin(0.5)
+        .setScrollFactor(0)
+        .setDepth(tiefe + 2);
+      feld.on('pointerover', () => feld.setFillStyle(DIALOG_KNOPF_HOVER_FARBE));
+      feld.on('pointerout', () => feld.setFillStyle(DIALOG_KNOPF_FARBE));
+      feld.on('pointerdown', aktion);
+      this.inventarKnoepfe.push(feld);
+      this.inventarObjekte.push(feld, text);
+    };
+    knopf(r.zurueck, 'Zurück', () => this.blaettere(-1));
+    knopf(r.weiter, 'Weiter', () => this.blaettere(1));
+    knopf(r.schliessen, 'Schließen', () => {
+      if (this.zustand.phase === 'inventar') this.schliesseInventar();
+    });
+    // Anfangs aus: unsichtbar und nicht klickbar.
+    this.inventarObjekte.forEach((o) => o.setVisible(false));
+    this.inventarKnoepfe.forEach((k) => {
+      if (k.input) k.input.enabled = false;
+    });
   }
 
   private baueKnopf(x: number, y: number, breite: number, beschriftung: string, aktion: () => void): void {
@@ -455,6 +690,22 @@ export class SpielScene extends Phaser.Scene {
           // Unter dem Tisch liegt Boden des Bereichs.
           this.zeichneBoden(boden, x, y, this.bodenFarbe(x, y));
           this.zeichneBlock(x, y, TISCH_HOEHE, TISCH_FARBE);
+          continue;
+        }
+        if (art === 'maschine') {
+          // Kaffeemaschine: Block mit Beschriftung auf der Deckflaeche; darunter Boden des Bereichs.
+          this.zeichneBoden(boden, x, y, this.bodenFarbe(x, y));
+          this.zeichneBlock(x, y, MASCHINE_HOEHE, MASCHINE_FARBE);
+          const deckel = gitterZuBild(x + 0.5, y + 0.5);
+          this.add
+            .text(deckel.x, deckel.y - MASCHINE_HOEHE, 'Kaffee', {
+              fontSize: `${MASCHINE_SCHRIFT_PX}px`,
+              color: '#ffffff',
+              stroke: '#000000',
+              strokeThickness: 3,
+            })
+            .setOrigin(0.5)
+            .setDepth(x + y + 2);
           continue;
         }
         let farbe = this.bodenFarbe(x, y);
@@ -558,6 +809,49 @@ export class SpielScene extends Phaser.Scene {
       .setOrigin(0.5)
       .setScrollFactor(0)
       .setDepth(10001);
-    zurueck.on('pointerdown', () => this.scene.start('Menue'));
+    zurueck.on('pointerdown', () => this.zumMenue());
+
+    // Knopf "Inventar" unter "Zurück zum Menü" (nur in Phase "laeuft" wirksam).
+    const ik = INVENTAR_KNOPF;
+    const inventarFeld = this.add
+      .rectangle(ik.x + ik.breite / 2, ik.y + ik.hoehe / 2, ik.breite, ik.hoehe, DIALOG_KNOPF_FARBE)
+      .setStrokeStyle(2, DIALOG_RAHMEN_FARBE)
+      .setScrollFactor(0)
+      .setDepth(HUD_TIEFE)
+      .setInteractive({ useHandCursor: true });
+    this.add
+      .text(ik.x + ik.breite / 2, ik.y + ik.hoehe / 2, 'Inventar (I)', { fontSize: `${ik.schriftPx}px`, color: '#ffffff' })
+      .setOrigin(0.5)
+      .setScrollFactor(0)
+      .setDepth(HUD_TIEFE + 1);
+    inventarFeld.on('pointerover', () => inventarFeld.setFillStyle(DIALOG_KNOPF_HOVER_FARBE));
+    inventarFeld.on('pointerout', () => inventarFeld.setFillStyle(DIALOG_KNOPF_FARBE));
+    inventarFeld.on('pointerdown', () => {
+      if (this.zustand.phase === 'laeuft') this.oeffneInventar();
+    });
+
+    // Kaffee im HUD (nur sichtbar, solange er getragen wird) und die kurze Meldung beim Verschütten.
+    const kh = KAFFEE_HUD;
+    this.kaffeeSymbol = this.add
+      .rectangle(kh.symbolX + kh.symbolBreite / 2, kh.symbolY + kh.symbolHoehe / 2, kh.symbolBreite, kh.symbolHoehe, kh.symbolFarbe)
+      .setScrollFactor(0)
+      .setDepth(HUD_TIEFE)
+      .setVisible(this.kaffee);
+    this.kaffeeText = this.add
+      .text(kh.textX, kh.textY, 'Kaffee', { ...stil, fontSize: `${kh.schriftPx}px` })
+      .setScrollFactor(0)
+      .setDepth(HUD_TIEFE)
+      .setVisible(this.kaffee);
+    this.verschuettetText = this.add
+      .text(w / 2, VERSCHUETTET_MELDUNG.y, 'Kaffee verschüttet!', {
+        ...stil,
+        color: VERSCHUETTET_MELDUNG.farbe,
+        fontSize: `${VERSCHUETTET_MELDUNG.schriftPx}px`,
+        fontStyle: 'bold',
+      })
+      .setOrigin(0.5)
+      .setScrollFactor(0)
+      .setDepth(HUD_TIEFE)
+      .setVisible(false);
   }
 }

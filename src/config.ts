@@ -22,6 +22,7 @@ export const DIALOG_SEKUNDEN = {
 };
 
 export type NpcId = 'empfang' | 'buchhaltung' | 'teamleitung' | 'it' | 'vertrieb';
+export const NPC_IDS: readonly NpcId[] = ['empfang', 'buchhaltung', 'teamleitung', 'it', 'vertrieb'];
 
 // Dialogkosten je NPC (ganze Sekunden, zwischen DIALOG_SEKUNDEN.min und .max).
 export const NPC_DIALOG_KOSTEN: Record<NpcId, number> = {
@@ -86,6 +87,8 @@ export const DIALOG_KNOPF_HOVER_FARBE = 0x4477aa;
 export const DIALOG_NAME_FARBE = '#ffd966';
 export const DIALOG_KOSTEN_FARBE = '#ffaa66';
 export const DIALOG_TIEFE = 15000;
+// Hoechste Zahl gleichzeitig angebotener Antworten (3 Antworten des Baums + "Kaffee überreichen").
+export const DIALOG_MAX_ANTWORTEN = 4;
 
 // Isometrische Darstellung (Rautenverhaeltnis 2:1: Kachelbreite = 2 * Kachelhoehe).
 export const KACHEL_BREITE = 64;
@@ -102,6 +105,71 @@ export const MAX_ZEITSCHRITT_SEKUNDEN = 0.1;
 
 // Ablegen der Kuendigung: groesster Abstand (Zellen) der Figurmitte zur Mitte der Ablagezelle.
 export const ABLEGE_REICHWEITE = 1.0;
+
+// Zeichentiefe der HUD-Teile, die ab Stufe 6 dazukommen (gleich der bisherigen HUD-Tiefe der Szene).
+export const HUD_TIEFE = 10000;
+
+// Kaffee (Stufe 6): Nehmen an der Maschine kostet Zeit; Reichweite = groesster Abstand (Zellen) der Figurmitte
+// zur Mitte der Maschinenzelle.
+export const KAFFEE_NEHMEN_SEKUNDEN = 2;
+export const KAFFEE_REICHWEITE = 1.0;
+export const MASCHINE_FARBE = 0x5a3a28;
+export const MASCHINE_HOEHE = 30; // Bildpunkte
+export const MASCHINE_SCHRIFT_PX = 14;
+export const KAFFEE_HINWEIS_TEXT = 'E/Leertaste: Kaffee nehmen';
+// Kaffee im HUD (Bildpunkte, Bild 800x640): Symbol (Tasse) und Beschriftung links unter der Stufenzeile.
+export const KAFFEE_HUD = {
+  symbolX: 10,
+  symbolY: 66,
+  symbolBreite: 22,
+  symbolHoehe: 20,
+  symbolFarbe: 0xc58b4a,
+  textX: 38,
+  textY: 62,
+  schriftPx: 20,
+};
+// Meldung "Kaffee verschüttet!" (Mitte oben unter dem Timer).
+export const VERSCHUETTET_MELDUNG = { sekunden: 2, schriftPx: 28, y: 110, farbe: '#ffb060' };
+
+// Inventarfenster (Bildpunkte, Bild 800x640); der Knopf "Inventar" liegt unter "Zurück zum Menü".
+export const INVENTAR_KNOPF = { x: 620, y: 52, breite: 170, hoehe: 36, schriftPx: 16 };
+export const INVENTAR_LAYOUT = {
+  fensterX: 20,
+  fensterY: 100,
+  fensterBreite: 760,
+  randX: 20,
+  randOben: 8,
+  randUnten: 16,
+  titelHoehe: 32,
+  luecke: 6,
+  infoHoehe: 300,
+  gegenstandHoehe: 56,
+  knopfHoehe: 40,
+  seiteKnopfBreite: 110,
+  seiteAnzeigeBreite: 150,
+  schliessenBreite: 150,
+  // Seitenaufteilung (Schaetzung fuer Courier: Zeichenbreite 0,6 em, Zeilenhoehe 1,25 em; bewusst vorsichtig).
+  zeichenProZeile: 70,
+  maxZeilenProSeite: 12,
+};
+export const INVENTAR_TITEL_SCHRIFT_PX = 22;
+export const INVENTAR_SCHRIFT_PX = 16;
+export const INVENTAR_TIEFE = 16000;
+export const INVENTAR_FENSTER_FARBE = 0x1c2433;
+export const INVENTAR_TITEL_FARBE = '#ffd966';
+
+// Startmenue: gespeicherte Infos und "Speicher löschen" (unter den Stufenknoepfen).
+export const MENUE_SPEICHER = {
+  textX: 40,
+  y: 602,
+  schriftPx: 20,
+  knopfX: 640,
+  knopfBreite: 240,
+  knopfHoehe: 44,
+  knopfSchriftPx: 20,
+  knopfFarbe: 0x553333,
+  knopfHoverFarbe: 0x774444,
+};
 
 // Timer-HUD und Meldungen.
 export const TIMER_WARNUNG_SEKUNDEN = 10; // ab dieser Restzeit (einschliesslich) ist die Zahl rot
