@@ -1,4 +1,4 @@
-import type { Stufe } from './config';
+import type { Stufe } from './config.ts';
 
 // Zentral gehaltene Wahl (ein Objekt).
 export const auswahl: { stufe: Stufe | null } = { stufe: null };

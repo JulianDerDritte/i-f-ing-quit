@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
-import { STUFEN, STUFEN_NAMEN, TIMER_SEKUNDEN, zeitText } from './config';
-import { auswahl } from './auswahl';
+import { STUFEN, STUFEN_NAMEN, TIMER_SEKUNDEN, zeitText } from './config.ts';
+import { auswahl } from './auswahl.ts';
 
 export class MenueScene extends Phaser.Scene {
   constructor() {

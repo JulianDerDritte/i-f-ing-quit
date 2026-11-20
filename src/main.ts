@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
-import { MenueScene } from './MenueScene';
-import { SpielScene } from './SpielScene';
+import { MenueScene } from './MenueScene.ts';
+import { SpielScene } from './SpielScene.ts';
 
 new Phaser.Game({
   type: Phaser.AUTO,
