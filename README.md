@@ -1,6 +1,6 @@
 # IFingQuit
 
-Browser-Spielprototyp (Vite, TypeScript, Phaser 3). Platzhalter-Grafik, keine externen Assets.
+Browser-Spielprototyp (Vite, TypeScript, Phaser 3). Die Spielgrafik besteht aus gezeichneten Formen; nur Logo und Icon sind Bilder von Julian (siehe Abschnitt "Bilder").
 
 ## Befehle
 
