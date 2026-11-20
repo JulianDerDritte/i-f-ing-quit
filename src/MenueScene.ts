@@ -1,7 +1,11 @@
 import Phaser from 'phaser';
-import { MENUE_LAYOUT, MENUE_SPEICHER, RAHMEN, STUFEN, STUFEN_NAMEN, TIMER_SEKUNDEN, zeitText } from './config.ts';
+import { MENUE_LAYOUT, MENUE_SPEICHER, PALETTE, STUFEN, STUFEN_NAMEN, SPRITE_SKALA, SZENEN_TEXTE, TIMER_SEKUNDEN, zeitText } from './config.ts';
 import { auswahl } from './auswahl.ts';
 import { holeSpeicher, ladeInfos, loescheSpeicher } from './speicher.ts';
+import { PixelText, knopfBauen, pixelTexteAufraeumen } from './grafik/pixeltext.ts';
+import { rasterAlsTextur } from './grafik/texturen.ts';
+import { menueHintergrund } from './grafik/ui.ts';
+import { pixelSkala } from './grafik/schrift.ts';
 
 export class MenueScene extends Phaser.Scene {
   constructor() {
@@ -15,26 +19,17 @@ export class MenueScene extends Phaser.Scene {
   create(): void {
     const w = this.scale.width;
     const L = MENUE_LAYOUT;
+    // Dynamische Textur-Texte beim Ende der Szene freigeben.
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => pixelTexteAufraeumen(this.textures));
+    // Buerohintergrund (blau, Deckenlinien, Deckenlicht, Fenster, Fliesen mit Teppich) statt weissem Rechteck.
+    rasterAlsTextur(this.textures, 'menue-bg', menueHintergrund());
+    this.add.image(0, 0, 'menue-bg').setOrigin(0, 0).setScale(SPRITE_SKALA).setDepth(-1);
     this.add.image(w / 2, L.logoY, 'logo').setDisplaySize(L.logoGroesse, L.logoGroesse);
-    this.add
-      .text(w / 2, L.titelY, 'Schwierigkeit wählen', { fontSize: `${L.titelPx}px`, color: '#aaaaaa' })
-      .setOrigin(0.5);
+    new PixelText(this, w / 2, L.titelY, SZENEN_TEXTE.menueTitel, { skala: pixelSkala(L.titelPx), farbe: 0xdfe6ff, rand: PALETTE.umriss, ox: 0.5, oy: 0.5 });
 
     STUFEN.forEach((stufe, i) => {
       const y = L.stufeY0 + i * L.stufeAbstand;
-      const feld = this.add
-        .rectangle(w / 2, y, L.knopfBreite, L.knopfHoehe, L.farbe)
-        .setStrokeStyle(RAHMEN.staerke, RAHMEN.farbe)
-        .setInteractive({ useHandCursor: true });
-      this.add
-        .text(w / 2, y, `${STUFEN_NAMEN[stufe]}  ${zeitText(TIMER_SEKUNDEN[stufe])}`, {
-          fontSize: `${L.schriftPx}px`,
-          color: '#ffffff',
-        })
-        .setOrigin(0.5);
-      feld.on('pointerover', () => feld.setFillStyle(L.hoverFarbe));
-      feld.on('pointerout', () => feld.setFillStyle(L.farbe));
-      feld.on('pointerdown', () => {
+      knopfBauen(this, w / 2 - L.knopfBreite / 2, y - L.knopfHoehe / 2, L.knopfBreite, L.knopfHoehe, 'stufe', `${STUFEN_NAMEN[stufe]}  ${zeitText(TIMER_SEKUNDEN[stufe])}`, pixelSkala(L.schriftPx), 0, () => {
         auswahl.stufe = stufe;
         this.scene.start('Spiel');
       });
@@ -43,21 +38,10 @@ export class MenueScene extends Phaser.Scene {
     // Gespeicherte Infos (aus frueheren Laeufen) und "Speicher löschen".
     const M = MENUE_SPEICHER;
     const speicher = holeSpeicher();
-    const zahl = this.add
-      .text(M.textX, M.y, `Gespeicherte Infos: ${ladeInfos(speicher).length}`, { fontSize: `${M.schriftPx}px`, color: '#aaaaaa' })
-      .setOrigin(0, 0.5);
-    const loeschen = this.add
-      .rectangle(M.knopfX, M.y, M.knopfBreite, M.knopfHoehe, M.knopfFarbe)
-      .setStrokeStyle(RAHMEN.staerke, RAHMEN.farbe)
-      .setInteractive({ useHandCursor: true });
-    this.add
-      .text(M.knopfX, M.y, 'Speicher löschen', { fontSize: `${M.knopfSchriftPx}px`, color: '#ffffff' })
-      .setOrigin(0.5);
-    loeschen.on('pointerover', () => loeschen.setFillStyle(M.knopfHoverFarbe));
-    loeschen.on('pointerout', () => loeschen.setFillStyle(M.knopfFarbe));
-    loeschen.on('pointerdown', () => {
+    const zahl = new PixelText(this, M.textX, M.y, `${SZENEN_TEXTE.menueInfos}${ladeInfos(speicher).length}`, { skala: pixelSkala(M.schriftPx), farbe: 0xdfe6ff, rand: PALETTE.umriss, ox: 0, oy: 0.5 });
+    knopfBauen(this, M.knopfX - M.knopfBreite / 2, M.y - M.knopfHoehe / 2, M.knopfBreite, M.knopfHoehe, 'speicher', SZENEN_TEXTE.menueLoeschen, pixelSkala(M.knopfSchriftPx), 0, () => {
       loescheSpeicher(speicher);
-      zahl.setText(`Gespeicherte Infos: ${ladeInfos(speicher).length}`);
+      zahl.setText(`${SZENEN_TEXTE.menueInfos}${ladeInfos(speicher).length}`);
     });
   }
 }

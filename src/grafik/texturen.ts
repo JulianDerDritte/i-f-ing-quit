@@ -6,6 +6,7 @@ import { NPC_IDS } from '../config.ts';
 import { NPC_SCHRITTE, RICHTUNGEN, SPIELER_SCHRITTE, chefBild, figurBild, npcBild, schattenBild } from './figuren.ts';
 import { bodenRaster, weltObjekte } from './welt.ts';
 import { rasterAlsRgba } from './raster.ts';
+import { blattSymbolRaster, menueHintergrund, stoppuhrRaster, tasseRaster } from './ui.ts';
 import type { Raster } from './raster.ts';
 import type { NpcId } from '../config.ts';
 import type { Richtung } from './figuren.ts';
@@ -51,4 +52,13 @@ export function registriereFiguren(textures: Phaser.Textures.TextureManager): vo
       for (let s = 0; s < NPC_SCHRITTE; s++) rasterAlsTextur(textures, npcSchluessel(id, d, s, true), npcBild(id, d, s, true));
     }
   }
+}
+
+// Bilder der Oberflaeche (Teil b): Menuehintergrund, Stoppuhr (gross und klein), Tasse, Blatt-Symbol.
+export function registriereUi(textures: Phaser.Textures.TextureManager): void {
+  rasterAlsTextur(textures, 'menue-bg', menueHintergrund());
+  rasterAlsTextur(textures, 'stoppuhr', stoppuhrRaster(true));
+  rasterAlsTextur(textures, 'stoppuhr-klein', stoppuhrRaster(false));
+  rasterAlsTextur(textures, 'tasse', tasseRaster());
+  rasterAlsTextur(textures, 'blatt-symbol', blattSymbolRaster());
 }

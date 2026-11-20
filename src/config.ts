@@ -127,7 +127,7 @@ export const DIALOG_ANTWORT_EINZUG = 12; // Text im Antwortknopf, Abstand vom li
 export const HUD_LAYOUT = {
   raumX: 10,
   raumY: 8,
-  raumPx: 22,
+  raumPx: 16, // Pixelschrift Skala 2
   stufeX: 10,
   stufeY: 38,
   stufePx: 14,
@@ -139,6 +139,10 @@ export const HUD_LAYOUT = {
   zurueckHoehe: 36,
   zurueckPx: 16,
   zurueckFarbe: 0x553333,
+  // Timer-Plakette (Bildpunkte): Mitte oben, Stufenzeile bricht bei stufeUmbruch Punkten Breite um
+  plaketteBreite: 180,
+  plaketteHoehe: 52,
+  stufeUmbruch: 300,
 };
 // Meldung nach Sieg oder Niederlage (Abstaende von der Bildmitte).
 export const MELDUNG_LAYOUT = {
@@ -182,12 +186,12 @@ export const KAFFEE_HINWEIS_TEXT = 'E/Leertaste: Kaffee nehmen';
 // Kaffee im HUD (Bildpunkte, Bild 800x640): Symbol (Tasse) und Beschriftung links unter der Stufenzeile.
 export const KAFFEE_HUD = {
   symbolX: 10,
-  symbolY: 66,
-  symbolBreite: 22,
-  symbolHoehe: 20,
+  symbolY: 88,
+  symbolBreite: 26, // Tasse als Pixelbild (13 x 9 Rasterpunkte, Skala 2)
+  symbolHoehe: 18,
   symbolFarbe: 0xc58b4a,
   textX: 38,
-  textY: 62,
+  textY: 84,
   schriftPx: 20,
 };
 // Meldung "Kaffee verschüttet!" (Mitte oben unter dem Timer).
@@ -211,7 +215,7 @@ export const INVENTAR_LAYOUT = {
   seiteAnzeigeBreite: 150,
   schliessenBreite: 150,
   // Seitenaufteilung (Schaetzung fuer Courier: Zeichenbreite 0,6 em, Zeilenhoehe 1,25 em; bewusst vorsichtig).
-  zeichenProZeile: 70,
+  zeichenProZeile: 58, // Pixelschrift: Textfeld 720 Punkte / Vorschub 12 = 60 Zeichen, mit Reserve
   maxZeilenProSeite: 12,
 };
 export const INVENTAR_TITEL_SCHRIFT_PX = 22;
@@ -368,3 +372,60 @@ export function zeitText(sekunden: number): string {
   const s = sekunden % 60;
   return `${m}:${s.toString().padStart(2, '0')}`;
 }
+
+// Bildgroesse (main.ts) fuer Layout-Rechnungen ohne Szene.
+export const BILD_GROESSE = { breite: 800, hoehe: 640 };
+
+// Feste Texte der Szenen (Pixelschrift: jedes Zeichen muss im Zeichensatz stehen, Test in tests/schrift.test.ts).
+export const SZENEN_TEXTE = {
+  menueTitel: 'Schwierigkeit wählen',
+  menueInfos: 'Gespeicherte Infos: ',
+  menueLoeschen: 'Speicher löschen',
+  raum: 'Raum: ',
+  stufe: 'Stufe: ',
+  startzeit: ' · Startzeit ',
+  hinweisAblegen: 'E: Kündigung ablegen',
+  zurueckMenue: 'Zurück zum Menü',
+  inventarKnopf: 'Inventar (I)',
+  kaffee: 'Kaffee',
+  verschuettet: 'Kaffee verschüttet!',
+  sieg: 'Kündigung abgelegt!',
+  niederlage: 'Zeit abgelaufen!',
+  uebrigeZeit: 'Übrige Zeit: ',
+  nochmal: 'Nochmal',
+  neustart: 'Neustart',
+  zumMenue: 'Zum Menü',
+  inventarTitel: 'Inventar',
+  zurueck: 'Zurück',
+  weiter: 'Weiter',
+  schliessen: 'Schließen',
+  gegenstaende: 'Gegenstände: ',
+  seite: 'Seite ',
+  von: ' von ',
+};
+
+// Knoepfe im Pixelstil: Flaeche normal/Hover und Textfarbe (Kontrast Text/Flaeche mindestens 4,5, Test in tests/ui.test.ts).
+export type KnopfArt = 'stufe' | 'speicher' | 'antwort' | 'inventar' | 'zurueck' | 'meldung';
+export const KNOPF_ARTEN: readonly KnopfArt[] = ['stufe', 'speicher', 'antwort', 'inventar', 'zurueck', 'meldung'];
+export const KNOPF_STILE: Record<KnopfArt, { flaeche: number; hover: number; text: number }> = {
+  stufe: { flaeche: MENUE_LAYOUT.farbe, hover: MENUE_LAYOUT.hoverFarbe, text: 0xffffff },
+  speicher: { flaeche: MENUE_SPEICHER.knopfFarbe, hover: MENUE_SPEICHER.knopfHoverFarbe, text: 0xffffff },
+  antwort: { flaeche: DIALOG_KNOPF_FARBE, hover: DIALOG_KNOPF_HOVER_FARBE, text: 0xffffff },
+  inventar: { flaeche: DIALOG_KNOPF_FARBE, hover: DIALOG_KNOPF_HOVER_FARBE, text: 0xffffff },
+  zurueck: { flaeche: HUD_LAYOUT.zurueckFarbe, hover: MENUE_SPEICHER.knopfHoverFarbe, text: 0xffffff },
+  meldung: { flaeche: MELDUNG_LAYOUT.knopfFarbe, hover: MELDUNG_LAYOUT.knopfHoverFarbe, text: 0xffffff },
+};
+// Gemeinsame Kanten der Knoepfe und Fenster: dicker schwarzer Umriss, heller Rahmen, gelbe Lichtkante.
+export const KANTEN = { umriss: 0x0b0b14, rahmen: 0xdfe6ff, licht: 0xffd23c, umrissStaerke: 4, rahmenStaerke: 2, lichtStaerke: 2 };
+// Fenster (Gespraech, Inventar): Flaeche, Namensleiste in Gelb mit dunkler Schrift, Textfarben.
+export const FENSTER_STIL = {
+  flaeche: DIALOG_FENSTER_FARBE,
+  inventarFlaeche: INVENTAR_FENSTER_FARBE,
+  leiste: 0xffd23c,
+  leisteText: 0x1c2433,
+  text: 0xffffff,
+  kosten: 0xffaa66,
+  eck: 0xff9a1c,
+};
+// Timer-Plakette im Logo-Stil: dunkle Plakette, rote Digitalziffern mit blassem Geisterbild der Segmente.
+export const PLAKETTE_STIL = { flaeche: 0x14141e, rahmen: 0x5a6aa8, ziffer: 0xff2a2a, ziffernHell: 0xff9a9a, geist: 0x4a1418 };

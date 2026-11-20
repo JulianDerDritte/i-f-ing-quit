@@ -2,34 +2,24 @@ import Phaser from 'phaser';
 import {
   BODEN_TIEFE,
   DIALOG_ANTWORT_EINZUG,
+  FENSTER_STIL,
   FIGUR_DARSTELLUNG,
   HUD_LAYOUT,
   KAMERA_LERP,
   MELDUNG_LAYOUT,
-  RAHMEN,
-  SCHRIFT_RAND,
+  PALETTE,
+  SZENEN_TEXTE,
   DIALOG_ANTWORT_SCHRIFT_PX,
-  DIALOG_FENSTER_FARBE,
-  DIALOG_KNOPF_FARBE,
-  DIALOG_KNOPF_HOVER_FARBE,
-  DIALOG_KOSTEN_FARBE,
   DIALOG_KOSTEN_SCHRIFT_PX,
-  DIALOG_NAME_FARBE,
   DIALOG_NAME_SCHRIFT_PX,
-  DIALOG_RAHMEN_FARBE,
   DIALOG_TEXT_SCHRIFT_PX,
   DIALOG_TIEFE,
   DIALOG_MAX_ANTWORTEN,
   HINWEIS_SCHRIFT_PX,
-  HUD_FARBE_NORMAL,
-  HUD_FARBE_WARNUNG,
-  HUD_SCHRIFT_PX,
   HUD_TIEFE,
-  INVENTAR_FENSTER_FARBE,
   INVENTAR_KNOPF,
   INVENTAR_SCHRIFT_PX,
   INVENTAR_TIEFE,
-  INVENTAR_TITEL_FARBE,
   INVENTAR_TITEL_SCHRIFT_PX,
   SPRITE_SKALA,
   KACHEL_BREITE,
@@ -46,7 +36,6 @@ import {
   NPC_SCHRIFT_PX,
   OVERLAY_ABDUNKLUNG,
   STUFEN_NAMEN,
-  TIMER_WARNUNG_SEKUNDEN,
   VERSCHUETTET_MELDUNG,
   WAND_HOEHE,
   zeitText,
@@ -59,7 +48,6 @@ import {
   inventarOeffnen,
   inventarSchliessen,
   nachfrageAbziehen,
-  istWarnung,
   nahAnAblage,
   startzeit,
   zeitAufgerundet,
@@ -94,10 +82,17 @@ import { gitterZuBild } from './projektion.ts';
 import { NPC_SCHRITTE, SPIELER_SCHRITTE } from './grafik/figuren.ts';
 import { figurZustand, neuerFigurZustand, stehen } from './grafik/animation.ts';
 import type { FigurZustand } from './grafik/animation.ts';
-import { BODEN_TEXTUR, figurSchluessel, npcSchluessel, registriereFiguren, registriereWelt } from './grafik/texturen.ts';
+import { BODEN_TEXTUR, figurSchluessel, npcSchluessel, registriereFiguren, registriereUi, registriereWelt } from './grafik/texturen.ts';
+import { PixelText, knopfBauen, neueTextur, pixelTexteAufraeumen, zeichneRechtecke } from './grafik/pixeltext.ts';
+import type { KnopfTeil } from './grafik/pixeltext.ts';
+import { blinkAn, fensterRechtecke, plaketteRaster, plaketteRechtecke, stufenZeile, zeitZiffern } from './grafik/ui.ts';
+import { VORSCHUB_ENG, ZEILE, pixelSkala } from './grafik/schrift.ts';
 import { bodenGroesse, weltObjekte } from './grafik/welt.ts';
 
 const TASTEN = 'W,A,S,D,UP,LEFT,DOWN,RIGHT';
+
+type Sichtbar = { setVisible(sichtbar: boolean): unknown };
+const farbeAusText = (s: string): number => parseInt(s.slice(1), 16);
 
 export class SpielScene extends Phaser.Scene {
   // Zustand wird bei jedem Start der Szene in create() neu angelegt.
@@ -110,9 +105,12 @@ export class SpielScene extends Phaser.Scene {
   private npcZ: FigurZustand[] = [];
   private npcSchatten: Phaser.GameObjects.Image[] = [];
   private folgeZiel!: Phaser.GameObjects.Zone;
-  private raumText!: Phaser.GameObjects.Text;
-  private timerText!: Phaser.GameObjects.Text;
-  private hinweisText!: Phaser.GameObjects.Text;
+  private raumText!: PixelText;
+  private plaketteBild!: Phaser.GameObjects.Image;
+  private plaketteSchluessel: string | null = null;
+  private plaketteText = '';
+  private plaketteHell = false;
+  private hinweisText!: PixelText;
   private hinweisArt: 'keiner' | 'ablage' | 'kaffee' = 'keiner';
   private ablegeTasten!: Phaser.Input.Keyboard.Key[];
   private inventarTaste!: Phaser.Input.Keyboard.Key;
@@ -121,27 +119,28 @@ export class SpielScene extends Phaser.Scene {
   private startSekunden = 0;
   private welt!: NpcWelt;
   private npcBilder: Phaser.GameObjects.Image[] = [];
-  private npcNamen: Phaser.GameObjects.Text[] = [];
+  private npcNamen: PixelText[] = [];
   private dialog: DialogZustand | null = null;
-  private dialogObjekte: (Phaser.GameObjects.Rectangle | Phaser.GameObjects.Text)[] = []; // alle Teile des Dialogfensters (nur ein-/ausgeblendet)
-  private dialogName!: Phaser.GameObjects.Text;
-  private dialogText!: Phaser.GameObjects.Text;
-  private dialogKosten!: Phaser.GameObjects.Text;
+  private dialogObjekte: Sichtbar[] = []; // alle Teile des Dialogfensters (nur ein-/ausgeblendet)
+  private dialogName!: PixelText;
+  private dialogText!: PixelText;
+  private dialogKosten!: PixelText;
+  private dialogRahmen!: Phaser.GameObjects.Graphics;
+  private kostenSymbol!: Phaser.GameObjects.Image;
+  private antwortKnoepfe: KnopfTeil[] = [];
   private antwortFelder: Phaser.GameObjects.Rectangle[] = [];
-  private antwortTexte: Phaser.GameObjects.Text[] = [];
-  private dialogFenster!: Phaser.GameObjects.Rectangle;
   private kaffee = false; // wird gerade Kaffee getragen?
   private inventar!: Inventar;
   private speicher: SpeicherQuelle | null = null;
-  private kaffeeSymbol!: Phaser.GameObjects.Rectangle;
-  private kaffeeText!: Phaser.GameObjects.Text;
-  private verschuettetText!: Phaser.GameObjects.Text;
+  private kaffeeSymbol!: Phaser.GameObjects.Image;
+  private kaffeeText!: PixelText;
+  private verschuettetText!: PixelText;
   private verschuettetRest = 0; // Restdauer der Meldung in Sekunden (echte Zeit, kein Zeitgeber)
-  private inventarObjekte: (Phaser.GameObjects.Rectangle | Phaser.GameObjects.Text)[] = [];
+  private inventarObjekte: Sichtbar[] = [];
   private inventarKnoepfe: Phaser.GameObjects.Rectangle[] = [];
-  private inventarInfoText!: Phaser.GameObjects.Text;
-  private inventarGegenText!: Phaser.GameObjects.Text;
-  private inventarAnzeige!: Phaser.GameObjects.Text;
+  private inventarInfoText!: PixelText;
+  private inventarGegenText!: PixelText;
+  private inventarAnzeige!: PixelText;
   private inventarSeitenTexte: string[] = [];
   private inventarSeite = 0;
 
@@ -168,6 +167,9 @@ export class SpielScene extends Phaser.Scene {
     this.bereich = startBereich;
     this.tasten = kb.addKeys(TASTEN, true) as Record<string, Phaser.Input.Keyboard.Key>;
 
+    // Dynamische Textur-Texte und die Plakette beim Ende der Szene freigeben (Neustart, Menue).
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => pixelTexteAufraeumen(this.textures));
+    registriereUi(this.textures);
     this.zeichneKarte();
 
     registriereFiguren(this.textures);
@@ -213,11 +215,7 @@ export class SpielScene extends Phaser.Scene {
       const b = gitterZuBild(p.x, p.y);
       return neuerFigurZustand(b.x, b.y, 'ur');
     });
-    this.npcNamen = NPCS.map((d) =>
-      this.add
-        .text(0, 0, d.name, { fontSize: `${NPC_SCHRIFT_PX}px`, color: '#ffffff', stroke: SCHRIFT_RAND.farbe, strokeThickness: SCHRIFT_RAND.npc })
-        .setOrigin(0.5, 1),
-    );
+    this.npcNamen = NPCS.map((d) => new PixelText(this, 0, 0, d.name, { skala: pixelSkala(NPC_SCHRIFT_PX), farbe: 0xffffff, rand: PALETTE.umriss, ox: 0.5, oy: 1 }));
 
     this.baueAnzeige(stufe);
     this.baueDialogFenster();
@@ -264,7 +262,7 @@ export class SpielScene extends Phaser.Scene {
     const b =bereichAnZelle(KARTE, Math.floor(this.pos.x), Math.floor(this.pos.y));
     if (b !== null && b !== this.bereich) {
       this.bereich = b;
-      this.raumText.setText(`Raum: ${BEREICH_ANZEIGE[b]}`);
+      this.raumText.setText(`${SZENEN_TEXTE.raum}${BEREICH_ANZEIGE[b]}`);
     }
     this.zeichneFigur(delta);
 
@@ -300,7 +298,7 @@ export class SpielScene extends Phaser.Scene {
   private setzeHinweis(art: 'keiner' | 'ablage' | 'kaffee'): void {
     if (art === this.hinweisArt) return;
     this.hinweisArt = art;
-    if (art === 'ablage') this.hinweisText.setText('E: Kündigung ablegen');
+    if (art === 'ablage') this.hinweisText.setText(SZENEN_TEXTE.hinweisAblegen);
     if (art === 'kaffee') this.hinweisText.setText(KAFFEE_HINWEIS_TEXT);
     this.hinweisText.setVisible(art !== 'keiner');
   }
@@ -339,7 +337,7 @@ export class SpielScene extends Phaser.Scene {
     this.setzeHinweis('keiner');
     this.inventarSeitenTexte = inventarSeiten(this.inventar);
     this.inventarSeite = 0;
-    this.inventarGegenText.setText(`Gegenstände: ${this.inventar.gegenstaende.join(', ')}`);
+    this.inventarGegenText.setText(`${SZENEN_TEXTE.gegenstaende}${this.inventar.gegenstaende.join(', ')}`);
     this.inventarObjekte.forEach((o) => o.setVisible(true));
     this.inventarKnoepfe.forEach((k) => {
       if (k.input) k.input.enabled = true;
@@ -360,7 +358,7 @@ export class SpielScene extends Phaser.Scene {
   private zeigeInventarSeite(): void {
     const n = this.inventarSeitenTexte.length;
     this.inventarInfoText.setText(this.inventarSeitenTexte[this.inventarSeite]);
-    this.inventarAnzeige.setText(`Seite ${this.inventarSeite + 1} von ${n}`);
+    this.inventarAnzeige.setText(`${SZENEN_TEXTE.seite}${this.inventarSeite + 1}${SZENEN_TEXTE.von}${n}`);
   }
 
   private blaettere(richtung: number): void {
@@ -392,34 +390,36 @@ export class SpielScene extends Phaser.Scene {
   }
 
   // Zeigt Text und Antworten des aktuellen Knotens; nicht benoetigte Antwortfelder sind aus und nicht klickbar.
+  // Zeigt Text und Antworten des aktuellen Knotens; nicht benoetigte Antwortfelder sind aus und nicht klickbar.
   private zeigeKnoten(): void {
     if (this.dialog === null) return;
     const k = aktuellerKnoten(this.dialog);
     if (k === null) return;
     const angeboten = angeboteneAntworten(this.dialog, this.kaffee);
     const r = dialogRechtecke(angeboten.length);
-    // Das Fenster waechst nach oben, wenn mehr als 3 Antworten angeboten werden: alle Teile folgen dem Layout.
-    this.dialogFenster.setPosition(r.fenster.x + r.fenster.breite / 2, r.fenster.y + r.fenster.hoehe / 2);
-    this.dialogFenster.setSize(r.fenster.breite, r.fenster.hoehe);
-    this.dialogName.setPosition(r.name.x, r.name.y);
+    // Das Fenster waechst nach oben, wenn mehr als 3 Antworten angeboten werden: Rahmen und alle Teile folgen dem Layout.
+    const leiste = { x: r.fenster.x + 22, y: r.name.y, b: r.fenster.breite - 44, h: r.name.hoehe };
+    zeichneRechtecke(this.dialogRahmen, fensterRechtecke(r.fenster.x, r.fenster.y, r.fenster.breite, r.fenster.hoehe, FENSTER_STIL.flaeche, leiste));
+    this.dialogName.setPosition(leiste.x + 8, leiste.y + (leiste.h - ZEILE * pixelSkala(DIALOG_NAME_SCHRIFT_PX)) / 2);
     this.dialogText.setPosition(r.text.x, r.text.y);
-    this.dialogKosten.setPosition(r.kosten.x, r.kosten.y);
+    this.dialogKosten.setPosition(r.kosten.x + 26, r.kosten.y + 2);
+    this.kostenSymbol.setPosition(r.kosten.x, r.kosten.y + 2);
     this.dialogText.setText(k.text);
     for (let i = 0; i < this.antwortFelder.length; i++) {
-      const feld = this.antwortFelder[i];
-      const text = this.antwortTexte[i];
+      const knopf = this.antwortKnoepfe[i];
       const an = i < angeboten.length;
-      feld.setVisible(an);
-      text.setVisible(an);
-      if (feld.input) feld.input.enabled = an;
+      knopf.grafik.setVisible(an);
+      knopf.text.setVisible(an);
+      knopf.feld.setVisible(an);
+      if (knopf.feld.input) knopf.feld.input.enabled = an;
       if (an) {
         const kr = r.knoepfe[i];
-        feld.setPosition(kr.x + kr.breite / 2, kr.y + kr.hoehe / 2);
-        text.setPosition(kr.x + DIALOG_ANTWORT_EINZUG, kr.y + kr.hoehe / 2);
-        text.setText(antwortBeschriftung(this.dialog, angeboten[i].antwort));
+        knopf.setzeOrt(kr.x, kr.y);
+        knopf.text.setText(antwortBeschriftung(this.dialog, angeboten[i].antwort));
       }
     }
   }
+
 
   // Slot = Platz des Knopfs im Fenster; der echte Antwortindex kommt aus den angebotenen Antworten.
   private waehleAntwort(slot: number): void {
@@ -467,58 +467,25 @@ export class SpielScene extends Phaser.Scene {
 
   private baueDialogFenster(): void {
     const r = dialogRechtecke(DIALOG_MAX_ANTWORTEN); // Platz fuer alle Knoepfe; zeigeKnoten stellt je Knoten das Layout ein
-    const f = r.fenster;
     this.dialogObjekte = [];
     this.antwortFelder = [];
-    this.antwortTexte = [];
+    this.antwortKnoepfe = [];
     const tiefe = DIALOG_TIEFE;
-    const mitte = (q: { x: number; y: number; breite: number; hoehe: number }) => ({
-      x: q.x + q.breite / 2,
-      y: q.y + q.hoehe / 2,
-    });
-    const fm = mitte(f);
-    this.dialogFenster = this.add
-      .rectangle(fm.x, fm.y, f.breite, f.hoehe, DIALOG_FENSTER_FARBE)
-      .setStrokeStyle(RAHMEN.staerke, DIALOG_RAHMEN_FARBE)
-      .setScrollFactor(0)
-      .setDepth(tiefe);
-    this.dialogObjekte.push(this.dialogFenster);
-    this.dialogName = this.add
-      .text(r.name.x, r.name.y, '', { fontSize: `${DIALOG_NAME_SCHRIFT_PX}px`, color: DIALOG_NAME_FARBE, fontStyle: 'bold' })
+    this.dialogRahmen = this.add.graphics().setScrollFactor(0).setDepth(tiefe);
+    this.dialogName = new PixelText(this, r.name.x, r.name.y, '', { skala: pixelSkala(DIALOG_NAME_SCHRIFT_PX), farbe: FENSTER_STIL.leisteText }).setScrollFactor(0).setDepth(tiefe + 1);
+    this.dialogText = new PixelText(this, r.text.x, r.text.y, '', { skala: pixelSkala(DIALOG_TEXT_SCHRIFT_PX), farbe: FENSTER_STIL.text, umbruch: r.text.breite })
       .setScrollFactor(0)
       .setDepth(tiefe + 1);
-    this.dialogText = this.add
-      .text(r.text.x, r.text.y, '', {
-        fontSize: `${DIALOG_TEXT_SCHRIFT_PX}px`,
-        color: '#ffffff',
-        wordWrap: { width: r.text.breite },
-      })
+    this.dialogKosten = new PixelText(this, r.kosten.x + 26, r.kosten.y, '', { skala: pixelSkala(DIALOG_KOSTEN_SCHRIFT_PX), farbe: FENSTER_STIL.kosten })
       .setScrollFactor(0)
       .setDepth(tiefe + 1);
-    this.dialogKosten = this.add
-      .text(r.kosten.x, r.kosten.y, '', { fontSize: `${DIALOG_KOSTEN_SCHRIFT_PX}px`, color: DIALOG_KOSTEN_FARBE })
-      .setScrollFactor(0)
-      .setDepth(tiefe + 1);
-    this.dialogObjekte.push(this.dialogName, this.dialogText, this.dialogKosten);
+    this.kostenSymbol = this.add.image(r.kosten.x, r.kosten.y, 'stoppuhr-klein').setOrigin(0, 0).setScale(SPRITE_SKALA).setScrollFactor(0).setDepth(tiefe + 1);
+    this.dialogObjekte.push(this.dialogRahmen, this.dialogName, this.dialogText, this.dialogKosten, this.kostenSymbol);
     r.knoepfe.forEach((kr, i) => {
-      const m = mitte(kr);
-      const feld = this.add
-        .rectangle(m.x, m.y, kr.breite, kr.hoehe, DIALOG_KNOPF_FARBE)
-        .setStrokeStyle(RAHMEN.staerke, DIALOG_RAHMEN_FARBE)
-        .setScrollFactor(0)
-        .setDepth(tiefe + 1)
-        .setInteractive({ useHandCursor: true });
-      const text = this.add
-        .text(kr.x + DIALOG_ANTWORT_EINZUG, m.y, '', { fontSize: `${DIALOG_ANTWORT_SCHRIFT_PX}px`, color: '#ffffff' })
-        .setOrigin(0, 0.5)
-        .setScrollFactor(0)
-        .setDepth(tiefe + 2);
-      feld.on('pointerover', () => feld.setFillStyle(DIALOG_KNOPF_HOVER_FARBE));
-      feld.on('pointerout', () => feld.setFillStyle(DIALOG_KNOPF_FARBE));
-      feld.on('pointerdown', () => this.waehleAntwort(i));
-      this.antwortFelder.push(feld);
-      this.antwortTexte.push(text);
-      this.dialogObjekte.push(feld, text);
+      const knopf = knopfBauen(this, kr.x, kr.y, kr.breite, kr.hoehe, 'antwort', '', pixelSkala(DIALOG_ANTWORT_SCHRIFT_PX), tiefe + 1, () => this.waehleAntwort(i), DIALOG_ANTWORT_EINZUG);
+      this.antwortKnoepfe.push(knopf);
+      this.antwortFelder.push(knopf.feld);
+      this.dialogObjekte.push(knopf.grafik, knopf.text, knopf.feld);
     });
     // Anfangs aus: unsichtbar und nicht klickbar.
     this.dialogObjekte.forEach((o) => o.setVisible(false));
@@ -526,6 +493,7 @@ export class SpielScene extends Phaser.Scene {
       if (fe.input) fe.input.enabled = false;
     });
   }
+
 
   // NPCs: Bild nach Blickrichtung und Laufschritt aus der Bewegung des Bildes (Stillstand im Gespraech: Stehbild)
   private zeichneNpcs(deltaMs: number): void {
@@ -550,11 +518,19 @@ export class SpielScene extends Phaser.Scene {
     });
   }
 
+  // Timer-Plakette: Ziffern MM:SS, bei Restzeit unter der Warnschwelle blinkend; neu gerechnet nur bei Aenderung (hoechstens 2 mal je Sekunde).
   private zeigeTimer(): void {
-    this.timerText.setText(zeitAufgerundet(this.zustand.rest));
-    this.timerText.setColor(istWarnung(this.zustand.rest, TIMER_WARNUNG_SEKUNDEN) ? HUD_FARBE_WARNUNG : HUD_FARBE_NORMAL);
+    const text = zeitZiffern(this.zustand.rest);
+    const hell = blinkAn(this.zustand.rest);
+    if (text === this.plaketteText && hell === this.plaketteHell) return;
+    this.plaketteText = text;
+    this.plaketteHell = hell;
+    this.plaketteSchluessel = neueTextur(this.textures, plaketteRaster(text, hell), this.plaketteSchluessel);
+    this.plaketteBild.setTexture(this.plaketteSchluessel);
   }
 
+
+  // Abdunkeln, Meldung und zwei Knoepfe. Wird genau einmal je Spiel aufgerufen (danach laeuft update nicht mehr).
   // Abdunkeln, Meldung und zwei Knoepfe. Wird genau einmal je Spiel aufgerufen (danach laeuft update nicht mehr).
   private zeigeMeldung(): void {
     this.figurSteht();
@@ -568,29 +544,30 @@ export class SpielScene extends Phaser.Scene {
       .rectangle(w / 2, h / 2, w, h, MELDUNG_LAYOUT.overlayFarbe, OVERLAY_ABDUNKLUNG)
       .setScrollFactor(0)
       .setDepth(MELDUNG_LAYOUT.tiefe);
-    const stil = { color: '#ffffff', stroke: SCHRIFT_RAND.farbe, strokeThickness: SCHRIFT_RAND.meldung };
-    this.add
-      .text(w / 2, h / 2 + MELDUNG_LAYOUT.titelDy, sieg ? 'Kündigung abgelegt!' : 'Zeit abgelaufen!', {
-        ...stil,
-        fontSize: `${MELDUNG_SCHRIFT_PX}px`,
-        fontStyle: 'bold',
-      })
-      .setOrigin(0.5)
+    new PixelText(this, w / 2, h / 2 + MELDUNG_LAYOUT.titelDy, sieg ? SZENEN_TEXTE.sieg : SZENEN_TEXTE.niederlage, {
+      skala: pixelSkala(MELDUNG_SCHRIFT_PX),
+      farbe: PALETTE.krawatteRot,
+      rand: PALETTE.umriss,
+      ox: 0.5,
+      oy: 0.5,
+    })
       .setScrollFactor(0)
       .setDepth(MELDUNG_LAYOUT.tiefe + 1);
     if (sieg) {
-      this.add
-        .text(w / 2, h / 2 + MELDUNG_LAYOUT.zeitDy, `Übrige Zeit: ${zeitAufgerundet(this.zustand.rest)}`, {
-          ...stil,
-          fontSize: `${MELDUNG_ZEIT_SCHRIFT_PX}px`,
-        })
-        .setOrigin(0.5)
+      new PixelText(this, w / 2, h / 2 + MELDUNG_LAYOUT.zeitDy, `${SZENEN_TEXTE.uebrigeZeit}${zeitAufgerundet(this.zustand.rest)}`, {
+        skala: pixelSkala(MELDUNG_ZEIT_SCHRIFT_PX),
+        farbe: 0xffffff,
+        rand: PALETTE.umriss,
+        ox: 0.5,
+        oy: 0.5,
+      })
         .setScrollFactor(0)
         .setDepth(MELDUNG_LAYOUT.tiefe + 1);
     }
-    this.baueKnopf(w / 2 - MELDUNG_LAYOUT.knopfDx, h / 2 + MELDUNG_LAYOUT.knopfDy, MELDUNG_LAYOUT.knopfBreite, sieg ? 'Nochmal' : 'Neustart', () => this.scene.restart());
-    this.baueKnopf(w / 2 + MELDUNG_LAYOUT.knopfDx, h / 2 + MELDUNG_LAYOUT.knopfDy, MELDUNG_LAYOUT.knopfBreite, 'Zum Menü', () => this.zumMenue());
+    this.baueKnopf(w / 2 - MELDUNG_LAYOUT.knopfDx, h / 2 + MELDUNG_LAYOUT.knopfDy, MELDUNG_LAYOUT.knopfBreite, sieg ? SZENEN_TEXTE.nochmal : SZENEN_TEXTE.neustart, () => this.scene.restart());
+    this.baueKnopf(w / 2 + MELDUNG_LAYOUT.knopfDx, h / 2 + MELDUNG_LAYOUT.knopfDy, MELDUNG_LAYOUT.knopfBreite, SZENEN_TEXTE.zumMenue, () => this.zumMenue());
   }
+
 
   private zeigeVerschuettet(): void {
     this.verschuettetRest = VERSCHUETTET_MELDUNG.sekunden;
@@ -606,68 +583,34 @@ export class SpielScene extends Phaser.Scene {
       x: q.x + q.breite / 2,
       y: q.y + q.hoehe / 2,
     });
-    const fm = mitte(r.fenster);
+    const leiste = { x: r.fenster.x + 22, y: r.titel.y, b: r.fenster.breite - 44, h: r.titel.hoehe };
+    const rahmen = this.add.graphics().setScrollFactor(0).setDepth(tiefe);
+    zeichneRechtecke(rahmen, fensterRechtecke(r.fenster.x, r.fenster.y, r.fenster.breite, r.fenster.hoehe, FENSTER_STIL.inventarFlaeche, leiste));
+    this.inventarObjekte.push(rahmen);
+    const titelSkala = Math.min(pixelSkala(INVENTAR_TITEL_SCHRIFT_PX), Math.floor(leiste.h / ZEILE));
     this.inventarObjekte.push(
-      this.add
-        .rectangle(fm.x, fm.y, r.fenster.breite, r.fenster.hoehe, INVENTAR_FENSTER_FARBE)
-        .setStrokeStyle(RAHMEN.staerke, DIALOG_RAHMEN_FARBE)
-        .setScrollFactor(0)
-        .setDepth(tiefe),
-    );
-    this.inventarObjekte.push(
-      this.add
-        .text(r.titel.x, r.titel.y, 'Inventar', {
-          fontSize: `${INVENTAR_TITEL_SCHRIFT_PX}px`,
-          color: INVENTAR_TITEL_FARBE,
-          fontStyle: 'bold',
-        })
+      new PixelText(this, leiste.x + 8, leiste.y + (leiste.h - ZEILE * titelSkala) / 2, SZENEN_TEXTE.inventarTitel, { skala: titelSkala, farbe: FENSTER_STIL.leisteText })
         .setScrollFactor(0)
         .setDepth(tiefe + 1),
     );
-    this.inventarInfoText = this.add
-      .text(r.info.x, r.info.y, '', {
-        fontSize: `${INVENTAR_SCHRIFT_PX}px`,
-        color: '#ffffff',
-        wordWrap: { width: r.info.breite },
-      })
+    const sText = pixelSkala(INVENTAR_SCHRIFT_PX);
+    this.inventarInfoText = new PixelText(this, r.info.x, r.info.y, '', { skala: sText, farbe: FENSTER_STIL.text, umbruch: r.info.breite }).setScrollFactor(0).setDepth(tiefe + 1);
+    this.inventarGegenText = new PixelText(this, r.gegenstaende.x + 26, r.gegenstaende.y, '', { skala: sText, farbe: FENSTER_STIL.kosten, umbruch: r.gegenstaende.breite - 26 })
       .setScrollFactor(0)
       .setDepth(tiefe + 1);
-    this.inventarGegenText = this.add
-      .text(r.gegenstaende.x, r.gegenstaende.y, '', {
-        fontSize: `${INVENTAR_SCHRIFT_PX}px`,
-        color: DIALOG_KOSTEN_FARBE,
-        wordWrap: { width: r.gegenstaende.breite },
-      })
+    const blatt = this.add.image(r.gegenstaende.x, r.gegenstaende.y + 2, 'blatt-symbol').setOrigin(0, 0).setScale(SPRITE_SKALA).setScrollFactor(0).setDepth(tiefe + 1);
+    this.inventarAnzeige = new PixelText(this, mitte(r.anzeige).x, mitte(r.anzeige).y, '', { skala: sText, farbe: FENSTER_STIL.text, ox: 0.5, oy: 0.5 })
       .setScrollFactor(0)
       .setDepth(tiefe + 1);
-    this.inventarAnzeige = this.add
-      .text(mitte(r.anzeige).x, mitte(r.anzeige).y, '', { fontSize: `${INVENTAR_SCHRIFT_PX}px`, color: '#ffffff' })
-      .setOrigin(0.5)
-      .setScrollFactor(0)
-      .setDepth(tiefe + 1);
-    this.inventarObjekte.push(this.inventarInfoText, this.inventarGegenText, this.inventarAnzeige);
+    this.inventarObjekte.push(this.inventarInfoText, this.inventarGegenText, blatt, this.inventarAnzeige);
     const knopf = (q: { x: number; y: number; breite: number; hoehe: number }, beschriftung: string, aktion: () => void) => {
-      const m = mitte(q);
-      const feld = this.add
-        .rectangle(m.x, m.y, q.breite, q.hoehe, DIALOG_KNOPF_FARBE)
-        .setStrokeStyle(RAHMEN.staerke, DIALOG_RAHMEN_FARBE)
-        .setScrollFactor(0)
-        .setDepth(tiefe + 1)
-        .setInteractive({ useHandCursor: true });
-      const text = this.add
-        .text(m.x, m.y, beschriftung, { fontSize: `${INVENTAR_SCHRIFT_PX}px`, color: '#ffffff' })
-        .setOrigin(0.5)
-        .setScrollFactor(0)
-        .setDepth(tiefe + 2);
-      feld.on('pointerover', () => feld.setFillStyle(DIALOG_KNOPF_HOVER_FARBE));
-      feld.on('pointerout', () => feld.setFillStyle(DIALOG_KNOPF_FARBE));
-      feld.on('pointerdown', aktion);
-      this.inventarKnoepfe.push(feld);
-      this.inventarObjekte.push(feld, text);
+      const k = knopfBauen(this, q.x, q.y, q.breite, q.hoehe, 'inventar', beschriftung, sText, tiefe + 1, aktion);
+      this.inventarKnoepfe.push(k.feld);
+      this.inventarObjekte.push(k.grafik, k.text, k.feld);
     };
-    knopf(r.zurueck, 'Zurück', () => this.blaettere(-1));
-    knopf(r.weiter, 'Weiter', () => this.blaettere(1));
-    knopf(r.schliessen, 'Schließen', () => {
+    knopf(r.zurueck, SZENEN_TEXTE.zurueck, () => this.blaettere(-1));
+    knopf(r.weiter, SZENEN_TEXTE.weiter, () => this.blaettere(1));
+    knopf(r.schliessen, SZENEN_TEXTE.schliessen, () => {
       if (this.zustand.phase === 'inventar') this.schliesseInventar();
     });
     // Anfangs aus: unsichtbar und nicht klickbar.
@@ -677,22 +620,12 @@ export class SpielScene extends Phaser.Scene {
     });
   }
 
+
+  // Knopf der Meldung; (x, y) ist die Mitte, wie bisher.
   private baueKnopf(x: number, y: number, breite: number, beschriftung: string, aktion: () => void): void {
-    const feld = this.add
-      .rectangle(x, y, breite, MELDUNG_LAYOUT.knopfHoehe, MELDUNG_LAYOUT.knopfFarbe)
-      .setStrokeStyle(RAHMEN.staerke, RAHMEN.farbe)
-      .setScrollFactor(0)
-      .setDepth(MELDUNG_LAYOUT.tiefe + 1)
-      .setInteractive({ useHandCursor: true });
-    this.add
-      .text(x, y, beschriftung, { fontSize: `${MELDUNG_KNOPF_SCHRIFT_PX}px`, color: '#ffffff' })
-      .setOrigin(0.5)
-      .setScrollFactor(0)
-      .setDepth(MELDUNG_LAYOUT.tiefe + 2);
-    feld.on('pointerover', () => feld.setFillStyle(MELDUNG_LAYOUT.knopfHoverFarbe));
-    feld.on('pointerout', () => feld.setFillStyle(MELDUNG_LAYOUT.knopfFarbe));
-    feld.on('pointerdown', aktion);
+    knopfBauen(this, x - breite / 2, y - MELDUNG_LAYOUT.knopfHoehe / 2, breite, MELDUNG_LAYOUT.knopfHoehe, 'meldung', beschriftung, pixelSkala(MELDUNG_KNOPF_SCHRIFT_PX), MELDUNG_LAYOUT.tiefe + 1, aktion);
   }
+
 
   // Pixel-Welt: ein Bodenbild, dazu Waende, Moebel, Tueren, Pflanzen und Chef als Bilder (Tiefe wie bisher x + y + 1).
   private zeichneKarte(): void {
@@ -702,17 +635,9 @@ export class SpielScene extends Phaser.Scene {
     for (const o of weltObjekte(KARTE)) {
       this.add.image(o.bildX, o.bildY, o.schluessel).setOrigin(0.5, 1).setScale(SPRITE_SKALA).setDepth(o.tiefe);
       if (o.art === 'maschine') {
-        // Kaffeemaschine: Beschriftung bleibt Phaser-Text (Teil b stellt sie auf Pixelschrift um).
+        // Kaffeemaschine: Beschriftung in Pixelschrift.
         const deckel = gitterZuBild(o.x + 0.5, o.y + 0.5);
-        this.add
-          .text(deckel.x, deckel.y - MASCHINE_HOEHE, 'Kaffee', {
-            fontSize: `${MASCHINE_SCHRIFT_PX}px`,
-            color: '#ffffff',
-            stroke: SCHRIFT_RAND.farbe,
-            strokeThickness: SCHRIFT_RAND.maschine,
-          })
-          .setOrigin(0.5)
-          .setDepth(o.x + o.y + 2);
+        new PixelText(this, deckel.x, deckel.y - MASCHINE_HOEHE, SZENEN_TEXTE.kaffee, { skala: pixelSkala(MASCHINE_SCHRIFT_PX), farbe: 0xffffff, rand: PALETTE.umriss, ox: 0.5, oy: 0.5 }).setDepth(o.x + o.y + 2);
       }
     }
   }
@@ -729,89 +654,78 @@ export class SpielScene extends Phaser.Scene {
 
   private baueAnzeige(stufe: Stufe): void {
     const w = this.scale.width;
-    const stil = { color: '#ffffff', stroke: SCHRIFT_RAND.farbe, strokeThickness: SCHRIFT_RAND.hud };
-    this.raumText = this.add
-      .text(HUD_LAYOUT.raumX, HUD_LAYOUT.raumY, `Raum: ${BEREICH_ANZEIGE[this.bereich]}`, { ...stil, fontSize: `${HUD_LAYOUT.raumPx}px` })
+    const rand = PALETTE.umriss;
+    this.raumText = new PixelText(this, HUD_LAYOUT.raumX, HUD_LAYOUT.raumY, `${SZENEN_TEXTE.raum}${BEREICH_ANZEIGE[this.bereich]}`, { skala: pixelSkala(HUD_LAYOUT.raumPx), farbe: 0xffffff, rand })
       .setScrollFactor(0)
       .setDepth(HUD_TIEFE);
-    this.add
-      .text(HUD_LAYOUT.stufeX, HUD_LAYOUT.stufeY, `Stufe: ${STUFEN_NAMEN[stufe]} · Startzeit ${zeitAufgerundet(this.startSekunden)}`, {
-        ...stil,
-        fontSize: `${HUD_LAYOUT.stufePx}px`,
-      })
+    new PixelText(this, HUD_LAYOUT.stufeX, HUD_LAYOUT.stufeY, stufenZeile(STUFEN_NAMEN[stufe], zeitAufgerundet(this.startSekunden)), {
+      skala: pixelSkala(HUD_LAYOUT.stufePx),
+      farbe: 0xffffff,
+      rand,
+      umbruch: HUD_LAYOUT.stufeUmbruch,
+    })
       .setScrollFactor(0)
       .setDepth(HUD_TIEFE);
-    this.timerText = this.add
-      .text(w / 2, HUD_LAYOUT.timerY, zeitAufgerundet(this.zustand.rest), {
-        ...stil,
-        fontSize: `${HUD_SCHRIFT_PX}px`,
-        fontStyle: 'bold',
-      })
-      .setOrigin(0.5, 0)
-      .setScrollFactor(0)
-      .setDepth(HUD_TIEFE);
+
+    // Timer-Plakette im Logo-Stil: dunkle Plakette, Stoppuhr links, rote Digitalziffern MM:SS.
+    const pb = HUD_LAYOUT.plaketteBreite;
+    const ph = HUD_LAYOUT.plaketteHoehe;
+    const px = (w - pb) / 2;
+    const py = HUD_LAYOUT.timerY;
+    zeichneRechtecke(this.add.graphics().setScrollFactor(0).setDepth(HUD_TIEFE), plaketteRechtecke(px, py, pb, ph));
+    this.add.image(px + 12, py + ph / 2, 'stoppuhr').setOrigin(0, 0.5).setScale(SPRITE_SKALA).setScrollFactor(0).setDepth(HUD_TIEFE + 1);
+    this.plaketteText = '';
+    this.plaketteSchluessel = null;
+    this.plaketteBild = this.add.image(px + 52, py + ph / 2, '__DEFAULT').setOrigin(0, 0.5).setScale(4).setScrollFactor(0).setDepth(HUD_TIEFE + 1);
     this.zeigeTimer();
-    this.hinweisText = this.add
-      .text(w / 2, this.scale.height - HUD_LAYOUT.hinweisAbstandUnten, 'E: Kündigung ablegen', { ...stil, fontSize: `${HINWEIS_SCHRIFT_PX}px` })
-      .setOrigin(0.5, 1)
+    this.hinweisText = new PixelText(this, w / 2, this.scale.height - HUD_LAYOUT.hinweisAbstandUnten, SZENEN_TEXTE.hinweisAblegen, {
+      skala: pixelSkala(HINWEIS_SCHRIFT_PX),
+      farbe: 0xffffff,
+      rand,
+      ox: 0.5,
+      oy: 1,
+    })
       .setScrollFactor(0)
       .setDepth(HUD_TIEFE)
       .setVisible(false);
 
-    const zurueck = this.add
-      .rectangle(w - HUD_LAYOUT.zurueckAbstandRechts, HUD_LAYOUT.zurueckY, HUD_LAYOUT.zurueckBreite, HUD_LAYOUT.zurueckHoehe, HUD_LAYOUT.zurueckFarbe)
-      .setStrokeStyle(RAHMEN.staerke, RAHMEN.farbe)
-      .setScrollFactor(0)
-      .setDepth(HUD_TIEFE)
-      .setInteractive({ useHandCursor: true });
-    this.add
-      .text(w - HUD_LAYOUT.zurueckAbstandRechts, HUD_LAYOUT.zurueckY, 'Zurück zum Menü', { fontSize: `${HUD_LAYOUT.zurueckPx}px`, color: '#ffffff' })
-      .setOrigin(0.5)
-      .setScrollFactor(0)
-      .setDepth(HUD_TIEFE + 1);
-    zurueck.on('pointerdown', () => this.zumMenue());
-
-    // Knopf "Inventar" unter "Zurück zum Menü" (nur in Phase "laeuft" wirksam).
+    // "Zurück zum Menü" und darunter "Inventar (I)" (nur in Phase "laeuft" wirksam).
+    knopfBauen(
+      this,
+      w - HUD_LAYOUT.zurueckAbstandRechts - HUD_LAYOUT.zurueckBreite / 2,
+      HUD_LAYOUT.zurueckY - HUD_LAYOUT.zurueckHoehe / 2,
+      HUD_LAYOUT.zurueckBreite,
+      HUD_LAYOUT.zurueckHoehe,
+      'zurueck',
+      SZENEN_TEXTE.zurueckMenue,
+      pixelSkala(HUD_LAYOUT.zurueckPx),
+      HUD_TIEFE,
+      () => this.zumMenue(),
+      null,
+      VORSCHUB_ENG, // 15 Zeichen: bei Vorschub 6 waeren es 180 Punkte, der Knopf ist 170 breit
+    );
     const ik = INVENTAR_KNOPF;
-    const inventarFeld = this.add
-      .rectangle(ik.x + ik.breite / 2, ik.y + ik.hoehe / 2, ik.breite, ik.hoehe, DIALOG_KNOPF_FARBE)
-      .setStrokeStyle(RAHMEN.staerke, DIALOG_RAHMEN_FARBE)
-      .setScrollFactor(0)
-      .setDepth(HUD_TIEFE)
-      .setInteractive({ useHandCursor: true });
-    this.add
-      .text(ik.x + ik.breite / 2, ik.y + ik.hoehe / 2, 'Inventar (I)', { fontSize: `${ik.schriftPx}px`, color: '#ffffff' })
-      .setOrigin(0.5)
-      .setScrollFactor(0)
-      .setDepth(HUD_TIEFE + 1);
-    inventarFeld.on('pointerover', () => inventarFeld.setFillStyle(DIALOG_KNOPF_HOVER_FARBE));
-    inventarFeld.on('pointerout', () => inventarFeld.setFillStyle(DIALOG_KNOPF_FARBE));
-    inventarFeld.on('pointerdown', () => {
+    knopfBauen(this, ik.x, ik.y, ik.breite, ik.hoehe, 'inventar', SZENEN_TEXTE.inventarKnopf, pixelSkala(ik.schriftPx), HUD_TIEFE, () => {
       if (this.zustand.phase === 'laeuft') this.oeffneInventar();
     });
 
     // Kaffee im HUD (nur sichtbar, solange er getragen wird) und die kurze Meldung beim Verschütten.
     const kh = KAFFEE_HUD;
-    this.kaffeeSymbol = this.add
-      .rectangle(kh.symbolX + kh.symbolBreite / 2, kh.symbolY + kh.symbolHoehe / 2, kh.symbolBreite, kh.symbolHoehe, kh.symbolFarbe)
+    this.kaffeeSymbol = this.add.image(kh.symbolX, kh.symbolY, 'tasse').setOrigin(0, 0).setScale(SPRITE_SKALA).setScrollFactor(0).setDepth(HUD_TIEFE).setVisible(this.kaffee);
+    this.kaffeeText = new PixelText(this, kh.textX, kh.textY, SZENEN_TEXTE.kaffee, { skala: pixelSkala(kh.schriftPx), farbe: 0xffffff, rand })
       .setScrollFactor(0)
       .setDepth(HUD_TIEFE)
       .setVisible(this.kaffee);
-    this.kaffeeText = this.add
-      .text(kh.textX, kh.textY, 'Kaffee', { ...stil, fontSize: `${kh.schriftPx}px` })
-      .setScrollFactor(0)
-      .setDepth(HUD_TIEFE)
-      .setVisible(this.kaffee);
-    this.verschuettetText = this.add
-      .text(w / 2, VERSCHUETTET_MELDUNG.y, 'Kaffee verschüttet!', {
-        ...stil,
-        color: VERSCHUETTET_MELDUNG.farbe,
-        fontSize: `${VERSCHUETTET_MELDUNG.schriftPx}px`,
-        fontStyle: 'bold',
-      })
-      .setOrigin(0.5)
+    this.verschuettetText = new PixelText(this, w / 2, VERSCHUETTET_MELDUNG.y, SZENEN_TEXTE.verschuettet, {
+      skala: pixelSkala(VERSCHUETTET_MELDUNG.schriftPx),
+      farbe: farbeAusText(VERSCHUETTET_MELDUNG.farbe),
+      rand,
+      ox: 0.5,
+      oy: 0.5,
+    })
       .setScrollFactor(0)
       .setDepth(HUD_TIEFE)
       .setVisible(false);
   }
+
 }

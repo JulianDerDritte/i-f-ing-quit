@@ -104,6 +104,19 @@ describe('Wände, Fenster, Lampen', () => {
     assert.ok(f.length > 0);
     for (const z of f) assert.ok(istWandZelle(KARTE, z.x, z.y), `${z.x},${z.y}`);
   });
+  // // Rotprobe (Hinweis H2 des Prüfers, A-009b): rot gesehen am 20.11.2026: H2 welt.ts:37 (nur die Zeile `if
+  // (!istWandZelle(karte, x, y)) continue;` in fensterZellen entfernt)
+  it('fensterZellen: eine Bodenzelle am Rand (synthetische Karte) wird nicht als Fensterzelle geführt, die Wand an derselben Stelle schon', () => {
+    const zeilen = [...KARTE.zeilen];
+    zeilen[0] = zeilen[0].slice(0, 5) + '.' + zeilen[0].slice(6); // Loch in der oberen Außenwand bei (5,0)
+    zeilen[5] = '.' + zeilen[5].slice(1); // Loch in der linken Außenwand bei (0,5)
+    const mitLoch = { ...KARTE, zeilen };
+    const vorher = fensterZellen(KARTE);
+    assert.ok(vorher.some((z) => z.x === 5 && z.y === 0) && vorher.some((z) => z.x === 0 && z.y === 5));
+    const nachher = fensterZellen(mitLoch);
+    assert.ok(!nachher.some((z) => z.x === 5 && z.y === 0), 'Bodenzelle (5,0) ist als Fenster geführt');
+    assert.ok(!nachher.some((z) => z.x === 0 && z.y === 5), 'Bodenzelle (0,5) ist als Fenster geführt');
+  });
   it('keine Fensterzelle liegt neben einer Tür (y innerhalb einer Zelle der Türzellen der Trennwand)', () => {
     for (const z of fensterZellen(KARTE)) {
       for (const d of [-1, 0, 1]) assert.ok(!(istTuerZelle(KARTE, z.x, z.y + d) && (z.x === 9 || z.x === 24)), `${z.x},${z.y}`);
