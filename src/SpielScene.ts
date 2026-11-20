@@ -4,18 +4,36 @@ import {
   BODENFARBEN,
   FIGUR_FARBE,
   FIGUR_RADIUS,
+  HINWEIS_SCHRIFT_PX,
+  HUD_FARBE_NORMAL,
+  HUD_FARBE_WARNUNG,
+  HUD_SCHRIFT_PX,
   KACHEL_BREITE,
   KACHEL_HOEHE,
   MAX_ZEITSCHRITT_SEKUNDEN,
+  MELDUNG_KNOPF_SCHRIFT_PX,
+  MELDUNG_SCHRIFT_PX,
+  MELDUNG_ZEIT_SCHRIFT_PX,
+  OVERLAY_ABDUNKLUNG,
   START_FARBE,
   STUFEN_NAMEN,
-  TIMER_SEKUNDEN,
+  TIMER_WARNUNG_SEKUNDEN,
   TISCH_FARBE,
   TISCH_HOEHE,
   WAND_FARBE,
   WAND_HOEHE,
-  zeitText,
 } from './config.ts';
+import type { Stufe } from './config.ts';
+import {
+  ablegen,
+  fortschreiben,
+  istWarnung,
+  nahAnAblage,
+  neuerZustand,
+  startzeit,
+  zeitAufgerundet,
+} from './spielzustand.ts';
+import type { Spielzustand } from './spielzustand.ts';
 import { auswahl } from './auswahl.ts';
 import { schritt } from './bewegung.ts';
 import type { Eingabe, Position } from './bewegung.ts';
@@ -40,6 +58,12 @@ export class SpielScene extends Phaser.Scene {
   private figur!: Phaser.GameObjects.Graphics;
   private folgeZiel!: Phaser.GameObjects.Zone;
   private raumText!: Phaser.GameObjects.Text;
+  private timerText!: Phaser.GameObjects.Text;
+  private hinweisText!: Phaser.GameObjects.Text;
+  private hinweisSichtbar = false;
+  private ablegeTasten!: Phaser.Input.Keyboard.Key[];
+  private zustand!: Spielzustand;
+  private startSekunden = 0;
 
   constructor() {
     super('Spiel');
@@ -79,11 +103,28 @@ export class SpielScene extends Phaser.Scene {
     );
     cam.startFollow(this.folgeZiel, true, 1, 1);
 
+    // Zustand und Eingabe frisch: keine haengende Taste, Timer voll, keine Meldung.
+    kb.resetKeys();
+    this.ablegeTasten = [kb.addKey(Phaser.Input.Keyboard.KeyCodes.E), kb.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE)];
+    this.startSekunden = startzeit(stufe, window.location.search);
+    this.zustand = neuerZustand(this.startSekunden);
+    this.hinweisSichtbar = false;
+
     this.baueAnzeige(stufe);
     this.zeichneFigur();
   }
 
   update(_zeit: number, delta: number): void {
+    if (this.zustand.phase !== 'laeuft') return; // Sieg oder Niederlage: alles steht.
+
+    // Der Timer laeuft mit der echten Bildzeit, die Bewegung mit der gekuerzten.
+    this.zustand = fortschreiben(this.zustand, delta / 1000);
+    this.zeigeTimer();
+    if (this.zustand.phase !== 'laeuft') {
+      this.zeigeMeldung();
+      return;
+    }
+
     const dt = Math.min(delta / 1000, MAX_ZEITSCHRITT_SEKUNDEN);
     const t = this.tasten;
     const eingabe: Eingabe = {
@@ -100,6 +141,73 @@ export class SpielScene extends Phaser.Scene {
       this.raumText.setText(`Raum: ${BEREICH_ANZEIGE[b]}`);
     }
     this.zeichneFigur();
+
+    const nah = nahAnAblage(KARTE, this.pos.x, this.pos.y);
+    if (nah !== this.hinweisSichtbar) {
+      this.hinweisSichtbar = nah;
+      this.hinweisText.setVisible(nah);
+    }
+    if (this.ablegeTasten.some((k) => Phaser.Input.Keyboard.JustDown(k))) {
+      this.zustand = ablegen(this.zustand, KARTE, this.pos.x, this.pos.y);
+      if (this.zustand.phase === 'sieg') this.zeigeMeldung();
+    }
+  }
+
+  private zeigeTimer(): void {
+    this.timerText.setText(zeitAufgerundet(this.zustand.rest));
+    this.timerText.setColor(istWarnung(this.zustand.rest, TIMER_WARNUNG_SEKUNDEN) ? HUD_FARBE_WARNUNG : HUD_FARBE_NORMAL);
+  }
+
+  // Abdunkeln, Meldung und zwei Knoepfe. Wird genau einmal je Spiel aufgerufen (danach laeuft update nicht mehr).
+  private zeigeMeldung(): void {
+    this.hinweisText.setVisible(false);
+    this.zeigeTimer();
+    const sieg = this.zustand.phase === 'sieg';
+    const w = this.scale.width;
+    const h = this.scale.height;
+    this.add
+      .rectangle(w / 2, h / 2, w, h, 0x000000, OVERLAY_ABDUNKLUNG)
+      .setScrollFactor(0)
+      .setDepth(20000);
+    const stil = { color: '#ffffff', stroke: '#000000', strokeThickness: 6 };
+    this.add
+      .text(w / 2, h / 2 - 110, sieg ? 'Kündigung abgelegt!' : 'Zeit abgelaufen!', {
+        ...stil,
+        fontSize: `${MELDUNG_SCHRIFT_PX}px`,
+        fontStyle: 'bold',
+      })
+      .setOrigin(0.5)
+      .setScrollFactor(0)
+      .setDepth(20001);
+    if (sieg) {
+      this.add
+        .text(w / 2, h / 2 - 50, `Übrige Zeit: ${zeitAufgerundet(this.zustand.rest)}`, {
+          ...stil,
+          fontSize: `${MELDUNG_ZEIT_SCHRIFT_PX}px`,
+        })
+        .setOrigin(0.5)
+        .setScrollFactor(0)
+        .setDepth(20001);
+    }
+    this.baueKnopf(w / 2 - 110, h / 2 + 30, 190, sieg ? 'Nochmal' : 'Neustart', () => this.scene.restart());
+    this.baueKnopf(w / 2 + 110, h / 2 + 30, 190, 'Zum Menü', () => this.scene.start('Menue'));
+  }
+
+  private baueKnopf(x: number, y: number, breite: number, beschriftung: string, aktion: () => void): void {
+    const feld = this.add
+      .rectangle(x, y, breite, 56, 0x335577)
+      .setStrokeStyle(2, 0xffffff)
+      .setScrollFactor(0)
+      .setDepth(20001)
+      .setInteractive({ useHandCursor: true });
+    this.add
+      .text(x, y, beschriftung, { fontSize: `${MELDUNG_KNOPF_SCHRIFT_PX}px`, color: '#ffffff' })
+      .setOrigin(0.5)
+      .setScrollFactor(0)
+      .setDepth(20002);
+    feld.on('pointerover', () => feld.setFillStyle(0x4477aa));
+    feld.on('pointerout', () => feld.setFillStyle(0x335577));
+    feld.on('pointerdown', aktion);
   }
 
   private zeichneKarte(): void {
@@ -176,7 +284,7 @@ export class SpielScene extends Phaser.Scene {
     this.folgeZiel.setPosition(bild.x, bild.y - 15);
   }
 
-  private baueAnzeige(stufe: keyof typeof TIMER_SEKUNDEN): void {
+  private baueAnzeige(stufe: Stufe): void {
     const w = this.scale.width;
     const stil = { color: '#ffffff', stroke: '#000000', strokeThickness: 4 };
     this.raumText = this.add
@@ -184,12 +292,28 @@ export class SpielScene extends Phaser.Scene {
       .setScrollFactor(0)
       .setDepth(10000);
     this.add
-      .text(10, 38, `Stufe: ${STUFEN_NAMEN[stufe]} · Startzeit ${zeitText(TIMER_SEKUNDEN[stufe])}`, {
+      .text(10, 38, `Stufe: ${STUFEN_NAMEN[stufe]} · Startzeit ${zeitAufgerundet(this.startSekunden)}`, {
         ...stil,
         fontSize: '14px',
       })
       .setScrollFactor(0)
       .setDepth(10000);
+    this.timerText = this.add
+      .text(w / 2, 6, zeitAufgerundet(this.zustand.rest), {
+        ...stil,
+        fontSize: `${HUD_SCHRIFT_PX}px`,
+        fontStyle: 'bold',
+      })
+      .setOrigin(0.5, 0)
+      .setScrollFactor(0)
+      .setDepth(10000);
+    this.zeigeTimer();
+    this.hinweisText = this.add
+      .text(w / 2, this.scale.height - 14, 'E: Kündigung ablegen', { ...stil, fontSize: `${HINWEIS_SCHRIFT_PX}px` })
+      .setOrigin(0.5, 1)
+      .setScrollFactor(0)
+      .setDepth(10000)
+      .setVisible(false);
 
     const zurueck = this.add
       .rectangle(w - 95, 28, 170, 36, 0x553333)

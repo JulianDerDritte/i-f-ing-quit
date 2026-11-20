@@ -33,6 +33,20 @@ export const FIGUR_RADIUS = 0.3; // in Zellen
 // Laengster Zeitschritt eines Bildes (Sekunden); schuetzt vor Spruengen nach Tab-Wechsel.
 export const MAX_ZEITSCHRITT_SEKUNDEN = 0.1;
 
+// Ablegen der Kuendigung: groesster Abstand (Zellen) der Figurmitte zur Mitte der Ablagezelle.
+export const ABLEGE_REICHWEITE = 1.0;
+
+// Timer-HUD und Meldungen.
+export const TIMER_WARNUNG_SEKUNDEN = 60; // ab dieser Restzeit (einschliesslich) ist die Zahl rot
+export const HUD_SCHRIFT_PX = 40;
+export const HUD_FARBE_NORMAL = '#ffffff';
+export const HUD_FARBE_WARNUNG = '#ff4040';
+export const HINWEIS_SCHRIFT_PX = 20;
+export const OVERLAY_ABDUNKLUNG = 0.7; // Deckkraft des schwarzen Schleiers (0 bis 1)
+export const MELDUNG_SCHRIFT_PX = 48;
+export const MELDUNG_ZEIT_SCHRIFT_PX = 24;
+export const MELDUNG_KNOPF_SCHRIFT_PX = 24;
+
 // Farben (Platzhalter). Je Bereich eine andere Bodenfarbe.
 export const BODENFARBEN = {
   Vorzimmer: 0x6b8f71,
