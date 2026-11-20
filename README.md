@@ -9,6 +9,10 @@ Browser-Spielprototyp (Vite, TypeScript, Phaser 3). Platzhalter-Grafik, keine ex
 - `npm run build` - Produktionsbuild nach `dist`
 - `npm run typecheck` - Typpruefung
 
+## Bilder
+
+Logo und Icon stammen von Julian. Die Originale liegen nur lokal unter `image/` (nicht im Repo, in `.gitignore`); verkleinerte Kopien liegen in `public/` (`logo.png`, `icon-192.png`, `icon-32.png`) und sind im Repo. Neu erzeugen: aus den Originalen mit einem Bildwerkzeug wie `sharp` (ausserhalb des Repos eingerichtet, keine Abhaengigkeit dieses Projekts) auf die Kantenlaengen der Dateinamen verkleinern.
+
 ## Steuerung
 
 Nach der Wahl der Schwierigkeit im Startmenue laeuft die Figur durch Vorzimmer, Grossraumbuero und Chefbuero (isometrische Ansicht).

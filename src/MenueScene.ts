@@ -7,17 +7,19 @@ export class MenueScene extends Phaser.Scene {
     super('Menue');
   }
 
+  preload(): void {
+    this.load.image('logo', `${import.meta.env.BASE_URL}logo.png`);
+  }
+
   create(): void {
     const w = this.scale.width;
+    this.add.image(w / 2, 140, 'logo').setDisplaySize(260, 260);
     this.add
-      .text(w / 2, 90, 'I f***ing QUIT!', { fontSize: '48px', color: '#ffffff', fontStyle: 'bold' })
-      .setOrigin(0.5);
-    this.add
-      .text(w / 2, 150, 'Schwierigkeit wählen', { fontSize: '20px', color: '#aaaaaa' })
+      .text(w / 2, 300, 'Schwierigkeit wählen', { fontSize: '20px', color: '#aaaaaa' })
       .setOrigin(0.5);
 
     STUFEN.forEach((stufe, i) => {
-      const y = 250 + i * 90;
+      const y = 370 + i * 80;
       const feld = this.add
         .rectangle(w / 2, y, 320, 64, 0x335577)
         .setStrokeStyle(2, 0xffffff)
