@@ -45,6 +45,14 @@ Nach der Wahl der Schwierigkeit im Startmenue laeuft die Figur durch Vorzimmer, 
 - Findet ein Test einen echten Fehler im Spielcode, wird dieser nicht still repariert, sondern gemeldet.
 - Spiel- und Layoutwerte stehen in `src/config.ts`; die Konsistenztests dort pruefen Bereiche und Ganzzahligkeit.
 
+## Veroeffentlichung
+
+- Adresse der Seite: https://julianderdritte.github.io/i-f-ing-quit/ (statische Seite ueber GitHub Pages; der Workflow `.github/workflows/deploy.yml` testet, baut und veroeffentlicht bei jedem Push auf `main` und auf Wunsch von Hand).
+- Das Repository ist oeffentlich, weil GitHub Pages fuer ein privates Repository im Tarif nicht angeboten wird; die Seite ist ohne Anmeldung ueber den Link erreichbar. Nichts aus `image/` liegt im Repository.
+- Die Vite-Basis ist relativ (`vite.config.ts`), die Seite laeuft deshalb aus jedem Unterpfad.
+- `?zeit=<Sekunden>` an der Adresse ist eine reine Probehilfe (siehe Probeparameter): wer sie nutzt, gibt sich nur mehr oder weniger Zeit; es gibt keine Daten und keine Sicherheitswirkung.
+- `npm run smoke -- <Adresse>` prueft eine veroeffentlichte Seite ohne Server und ohne Bau: Startseite, Titel, alle Dateien, Dateiart und Groesse des Bundles.
+
 ## Probeparameter
 
 Die Adresse mit `?zeit=<Sekunden>` (zum Beispiel `?zeit=20`) ersetzt fuer diesen Start die Startzeit der gewaehlten Stufe, damit Sieg und Niederlage ohne langes Warten probiert werden koennen. Ohne Parameter oder bei ungueltigem oder nicht positivem Wert gilt die Konfiguration. Nur ein Probehilfsmittel, spaeter entfernbar.
