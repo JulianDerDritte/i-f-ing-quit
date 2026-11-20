@@ -23,6 +23,10 @@ Nach der Wahl der Schwierigkeit im Startmenue laeuft die Figur durch Vorzimmer, 
 - Oben in der Bildmitte laeuft der Timer (m:ss, aufgerundet, rot ab der Warnzeit). Er startet mit der Spielszene.
 - Sieg: im Chefbuero nahe der goldenen Ablagezelle mit `E` oder der Leertaste die Kuendigung ablegen (ein Hinweis erscheint in Reichweite). Niederlage: der Timer erreicht null. Beide Male friert das Spiel ein; "Nochmal" bzw. "Neustart" startet dieselbe Stufe neu, "Zum Menue" fuehrt ins Startmenue.
 
+- `I` oder der Knopf "Inventar" oeffnet das Inventar (nur waehrend das Spiel laeuft); `I`, `Escape` oder der Knopf "Schliessen" schliessen es wieder. Solange es offen ist, stehen Timer, Figur und NPCs.
+- An der Kaffeemaschine (Zelle "Kaffee" im Grossraumbuero) nimmt `E` oder die Leertaste Kaffee, solange keiner getragen wird; das kostet etwas Zeit. An der Ablage hat das Ablegen der Kuendigung Vorrang.
+- Im Startmenue zeigt "Gespeicherte Infos" die gemerkten Informationen; der Knopf "Speicher loeschen" entfernt sie.
+
 ## NPCs und Gespraeche
 
 - Im Gebaeude patrouillieren NPCs (Rollen wie Empfang oder Buchhaltung) auf festen Routen: vom ersten Wegpunkt zum letzten und zurueck, endlos. Sie laufen nur, solange das Spiel laeuft; im Gespraech, nach Sieg und nach Niederlage stehen sie.
